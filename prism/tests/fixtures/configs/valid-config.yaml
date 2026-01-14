@@ -1,0 +1,38 @@
+# Valid PRISM configuration for testing
+
+indexer:
+  chunkSize: 500
+  overlap: 50
+  languages:
+    - typescript
+    - javascript
+    - python
+    - rust
+    - go
+  includePatterns:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.jsx"
+    - "**/*.py"
+    - "**/*.rs"
+    - "**/*.go"
+  excludePatterns:
+    - "**/node_modules/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/.git/**"
+    - "**/coverage/**"
+
+vectorDB:
+  type: sqlite
+  path: ~/.prism/test-vector.db
+
+tokenOptimizer:
+  maxTokens: 100000
+  targetCompression: 0.7
+  preserveSignatures: true
+
+modelRouter:
+  preferLocal: false
+  localEndpoint: http://localhost:11434

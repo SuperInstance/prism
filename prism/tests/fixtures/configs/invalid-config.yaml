@@ -1,0 +1,12 @@
+# Invalid PRISM configuration (should fail validation)
+
+indexer:
+  chunkSize: 50  # Too small (must be >= 100)
+  overlap: 100   # Greater than chunkSize
+
+vectorDB:
+  type: mongodb  # Invalid type (must be sqlite or cloudflare)
+
+tokenOptimizer:
+  maxTokens: 500  # Too small (must be >= 1000)
+  targetCompression: 1.5  # Invalid (must be between 0 and 1)

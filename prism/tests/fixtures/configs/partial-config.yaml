@@ -1,0 +1,11 @@
+# Partial PRISM configuration (should merge with defaults)
+
+indexer:
+  chunkSize: 1000
+  overlap: 100
+
+vectorDB:
+  type: sqlite
+
+tokenOptimizer:
+  maxTokens: 50000
