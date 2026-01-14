@@ -2,7 +2,7 @@
 # https://developers.cloudflare.com/workers/wrangler/configuration/
 
 name = "claudes-friend"
-main = "src/worker.ts"
+main = "src/worker-vectorize.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat_v2"]
 
@@ -17,11 +17,11 @@ compatibility_flags = ["nodejs_compat_v2"]
 # API Gateway Worker
 # ============================================
 
-[env.production]
-name = "api-gateway"
-routes = [
-  { pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }
-]
+# [env.production]
+# name = "api-gateway"
+# routes = [
+#   { pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }
+# ]
 
 # ============================================
 # D1 Database Bindings
@@ -30,7 +30,7 @@ routes = [
 [[d1_databases]]
 binding = "DB"
 database_name = "claudes-friend-db"
-database_id = "" # Add your D1 database ID after creation
+database_id = "08674847-b36d-442e-b6a4-46b359cc6cf3"
 
 # ============================================
 # KV Namespace Bindings
@@ -38,7 +38,7 @@ database_id = "" # Add your D1 database ID after creation
 
 [[kv_namespaces]]
 binding = "KV"
-id = "" # Add your KV namespace ID after creation
+id = "57bcad6995384ed69576754748d380f8"
 
 # ============================================
 # R2 Bucket Bindings
@@ -51,23 +51,24 @@ bucket_name = "claudes-friend-storage"
 # ============================================
 # Vectorize Index Bindings
 # ============================================
+# Vectorize provides fast vector similarity search with ANN indexing
 
 [[vectorize]]
 binding = "VECTORIZE"
-index_name = "claudes-companion"
+index_name = "claudes-friend-index"
 
 # ============================================
 # Durable Objects Bindings
 # ============================================
-
-[[durable_objects.bindings]]
-name = "SESSIONS"
-class_name = "SessionDurableObject"
+# Commented out - not implemented yet
+# [[durable_objects.bindings]]
+# name = "SESSIONS"
+# class_name = "SessionDurableObject"
 
 # Migrations for Durable Objects
-[[migrations]]
-tag = "v1"
-new_classes = ["SessionDurableObject"]
+# [[migrations]]
+# tag = "v1"
+# new_classes = ["SessionDurableObject"]
 
 # ============================================
 # Workers AI Binding
@@ -123,19 +124,15 @@ LOG_LEVEL = "error"
 # ============================================
 
 [build]
-command = "npm run build"
-
-[build.upload]
-format = "modules"
-main = "./dist/worker.js"
+command = "npx esbuild src/worker-vectorize.ts --bundle --format=esm --outfile=dist/worker.js --external:@cloudflare/workers-types"
 
 # ============================================
 # Limits and Rules
 # ============================================
+# CPU limits require paid plan - commented out for free tier
 
-# CPU time limit (ms)
-[limits]
-cpu_ms = 50
+# [limits]
+# cpu_ms = 50
 
 # ============================================
 # Triggers
