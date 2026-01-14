@@ -34,8 +34,15 @@ interface RequestContext {
   request: Request;
 }
 
-interface IndexRequest {
+interface CodeFile {
   path: string;
+  content: string;
+  language?: string;
+}
+
+interface IndexRequest {
+  path?: string;  // Deprecated: Use files array instead
+  files?: CodeFile[];
   options?: {
     incremental?: boolean;
     include?: string[];
@@ -50,8 +57,11 @@ interface SearchRequest {
   limit?: number;
   minScore?: number;
   filters?: {
-    filePath?: string;
-    language?: string;
+    filePath?: string;       // Filter by file path (supports wildcards: src/**/*.ts)
+    language?: string;       // Filter by language (typescript, python, etc.)
+    pathPrefix?: string;     // Filter by path prefix (e.g., "src/", "lib/")
+    createdAfter?: number;   // Filter by creation time (Unix timestamp ms)
+    createdBefore?: number;  // Filter by creation time (Unix timestamp ms)
   };
 }
 
@@ -198,6 +208,7 @@ async function healthCheck(request: Request, ctx: RequestContext): Promise<Respo
         status: 'healthy',
         timestamp: new Date().toISOString(),
         version: '0.2.0',
+        environment: ctx.env.ENVIRONMENT || 'development',
         hnsw_initialized: dbResult && (dbResult as any).count > 0,
       },
     } satisfies APIResponse);
@@ -214,15 +225,20 @@ async function healthCheck(request: Request, ctx: RequestContext): Promise<Respo
  *
  * POST /api/index
  *
- * Indexes a directory of code files
+ * Indexes code files passed in the request body.
+ * For Cloudflare Workers, files must be passed directly since there's no filesystem access.
  *
  * Request body:
  * {
- *   "path": "/path/to/code",
+ *   "files": [
+ *     {
+ *       "path": "src/example.ts",
+ *       "content": "function example() { return true; }",
+ *       "language": "typescript"
+ *     }
+ *   ],
  *   "options": {
- *     "incremental": true,
- *     "include": ["*.ts", "*.js"],
- *     "exclude": ["node_modules"]
+ *     "incremental": true
  *   }
  * }
  */
@@ -230,28 +246,130 @@ async function indexCode(request: Request, ctx: RequestContext): Promise<Respons
   try {
     const body = await request.json() as IndexRequest;
 
-    // Validate request
-    if (!body.path) {
+    // Validate request - support both old format (path) and new format (files array)
+    if (!body.files && !body.path) {
       return Response.json({
         success: false,
-        error: 'Missing required field: path',
+        error: 'Missing required field: files or path',
       } satisfies APIResponse, { status: 400 });
     }
 
-    // TODO: Implement actual indexing
-    // For now, return a placeholder response
+    // If path is provided, return info about the new format
+    if (body.path && !body.files) {
+      return Response.json({
+        success: false,
+        error: 'Direct filesystem access not available in Workers. Please provide files array.',
+        message: 'Use { "files": [{"path": "...", "content": "..."}] } instead of { "path": "..." }',
+      } satisfies APIResponse, { status: 400 });
+    }
+
+    const files = body.files || [];
+    const options = body.options || {};
+    const startTime = Date.now();
+
+    // Track results
+    let indexedFiles = 0;
+    let indexedChunks = 0;
+    let errors = 0;
+    const failedFiles: string[] = [];
+
+    // Process each file
+    for (const file of files) {
+      try {
+        // Check if file should be skipped (incremental indexing)
+        if (options.incremental) {
+          const existingRecord = await ctx.env.DB.prepare(
+            'SELECT checksum, last_modified FROM file_index WHERE path = ?'
+          ).bind(file.path).first();
+
+          if (existingRecord) {
+            // Calculate checksum
+            const checksum = await calculateChecksum(file.content);
+
+            // If checksum matches, skip
+            if ((existingRecord as any).checksum === checksum) {
+              continue;
+            }
+          }
+        }
+
+        // Chunk the file (simple chunking by lines for now)
+        const chunks = chunkFile(file.path, file.content, file.language || detectLanguage(file.path));
+
+        // Generate embeddings for chunks
+        const embeddings: number[][] = [];
+        for (const chunk of chunks) {
+          try {
+            const embedding = await generateEmbedding(ctx, chunk.content);
+            embeddings.push(embedding);
+          } catch (error) {
+            console.error(`Failed to generate embedding for ${file.path}:${chunk.startLine}:`, error);
+            throw error;
+          }
+        }
+
+        // Store chunks in D1
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i];
+          const embedding = embeddings[i];
+          const checksum = await calculateChecksum(chunk.content);
+
+          await ctx.env.DB.prepare(`
+            INSERT OR REPLACE INTO vector_chunks
+            (id, file_path, content, start_line, end_line, language, embedding, checksum, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            `${file.path}:${i}`,
+            file.path,
+            chunk.content,
+            chunk.startLine,
+            chunk.endLine,
+            chunk.language,
+            encodeFloat32Array(embedding),
+            checksum,
+            Date.now(),
+            Date.now()
+          ).run();
+        }
+
+        // Update file index
+        const fileChecksum = await calculateChecksum(file.content);
+        await ctx.env.DB.prepare(`
+          INSERT OR REPLACE INTO file_index
+          (path, checksum, file_size, last_modified, last_indexed, chunk_count)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).bind(
+          file.path,
+          fileChecksum,
+          file.content.length,
+          Date.now(),
+          Date.now(),
+          chunks.length
+        ).run();
+
+        indexedFiles++;
+        indexedChunks += chunks.length;
+
+      } catch (error) {
+        errors++;
+        failedFiles.push(file.path);
+        console.error(`Failed to index ${file.path}:`, error);
+      }
+    }
+
+    const duration = Date.now() - startTime;
+
     const result: IndexResult = {
-      files: 0,
-      chunks: 0,
-      errors: 0,
-      duration: 0,
-      failedFiles: [],
+      files: indexedFiles,
+      chunks: indexedChunks,
+      errors,
+      duration,
+      failedFiles,
     };
 
     return Response.json({
       success: true,
       data: result,
-      message: 'Indexing not yet implemented - placeholder response',
     } satisfies APIResponse);
   } catch (error) {
     return Response.json({
@@ -287,18 +405,94 @@ async function searchCode(request: Request, ctx: RequestContext): Promise<Respon
       } satisfies APIResponse, { status: 400 });
     }
 
-    // TODO: Implement actual search
-    // For now, return a placeholder response
+    const limit = body.limit || 10;
+    const minScore = body.minScore || 0.0;
+    const filters = body.filters || {};
+
+    // Generate embedding for query
+    const queryEmbedding = await generateEmbedding(ctx, body.query);
+    console.log(`Query embedding dimension: ${queryEmbedding.length}`);
+
+    // Build SQL query with filters
+    let sql = 'SELECT id, file_path, content, start_line, end_line, language, embedding, created_at FROM vector_chunks WHERE deleted_at IS NULL';
+    const params: any[] = [];
+
+    // Apply filters
+    if (filters.language) {
+      sql += ' AND language = ?';
+      params.push(filters.language);
+    }
+
+    if (filters.pathPrefix) {
+      sql += ' AND file_path LIKE ?';
+      params.push(`${filters.pathPrefix}%`);
+    }
+
+    if (filters.filePath) {
+      // Support both exact match and wildcard with %
+      sql += ' AND file_path LIKE ?';
+      params.push(filters.filePath.replace('*', '%'));
+    }
+
+    if (filters.createdAfter) {
+      sql += ' AND created_at >= ?';
+      params.push(filters.createdAfter);
+    }
+
+    if (filters.createdBefore) {
+      sql += ' AND created_at <= ?';
+      params.push(filters.createdBefore);
+    }
+
+    console.log(`SQL: ${sql}, params: ${params.join(', ')}`);
+
+    // Execute query with filters
+    // D1 requires all bind parameters in a single call
+    let dbQuery = ctx.env.DB.prepare(sql);
+    if (params.length > 0) {
+      dbQuery = dbQuery.bind(...params);
+    }
+    const chunksResult = await dbQuery.all();
+
+    console.log(`Found ${chunksResult.results.length} chunks in database (after filters)`);
+
+    // Calculate similarities and sort
     const results: SearchResult[] = [];
+    for (const row of chunksResult.results as any[]) {
+      if (!row.embedding) continue;
+
+      try {
+        const chunkEmbedding = decodeFloat32Array(row.embedding);
+        const similarity = cosineSimilarity(queryEmbedding, chunkEmbedding);
+
+        if (similarity >= minScore) {
+          results.push({
+            id: row.id,
+            filePath: row.file_path,
+            content: row.content,
+            startLine: row.start_line,
+            endLine: row.end_line,
+            language: row.language,
+            score: similarity,
+          });
+        }
+      } catch (error) {
+        console.error(`Failed to process chunk ${row.id}:`, error);
+        continue;
+      }
+    }
+
+    // Sort by score descending and limit
+    results.sort((a, b) => b.score - a.score);
+    const limitedResults = results.slice(0, limit);
 
     return Response.json({
       success: true,
       data: {
-        results,
+        results: limitedResults,
         query: body.query,
-        total: 0,
+        total: limitedResults.length,
       },
-      message: 'Search not yet implemented - placeholder response',
     } satisfies APIResponse);
   } catch (error) {
     return Response.json({
@@ -337,6 +531,314 @@ async function getStats(request: Request, ctx: RequestContext): Promise<Response
   }
 }
 
+/**
+ * Debug endpoint: Get all raw chunks with embedding info
+ *
+ * GET /api/debug/chunks
+ *
+ * Returns all chunks with embedding dimensions and sample values
+ */
+async function getRawChunks(request: Request, ctx: RequestContext): Promise<Response> {
+  try {
+    const chunksResult = await ctx.env.DB.prepare(`
+      SELECT id, file_path, content, start_line, end_line, language, embedding
+      FROM vector_chunks
+      WHERE deleted_at IS NULL
+      LIMIT 10
+    `).all();
+
+    const chunks = (chunksResult.results as any[]).map(row => {
+      console.log(`Row ${row.id}: embedding type=${typeof row.embedding}, instanceof Uint8Array=${row.embedding instanceof Uint8Array}, length=${row.embedding?.length}`);
+
+      let embedding: number[] = [];
+      if (row.embedding) {
+        try {
+          embedding = decodeFloat32Array(row.embedding);
+        } catch (e) {
+          console.error(`Failed to decode embedding for ${row.id}:`, e);
+        }
+      }
+
+      return {
+        id: row.id,
+        filePath: row.file_path,
+        content: row.content.substring(0, 100) + '...',  // Truncate for readability
+        startLine: row.start_line,
+        endLine: row.end_line,
+        language: row.language,
+        embeddingDim: embedding.length,
+        embeddingSample: embedding.slice(0, 5),  // First 5 values
+      };
+    });
+
+    return Response.json({
+      success: true,
+      data: {
+        chunks,
+        total: chunks.length,
+      },
+    } satisfies APIResponse);
+  } catch (error) {
+    return Response.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get chunks',
+    } satisfies APIResponse, { status: 500 });
+  }
+}
+
+/**
+ * Debug endpoint: Search using an existing chunk's embedding
+ *
+ * POST /api/debug/search-similarity
+ *
+ * Uses the first chunk's embedding as the query to test similarity calculation
+ */
+async function searchWithSimilarity(request: Request, ctx: RequestContext): Promise<Response> {
+  try {
+    // Get all chunks
+    const chunksResult = await ctx.env.DB.prepare(`
+      SELECT id, file_path, content, start_line, end_line, language, embedding
+      FROM vector_chunks
+      WHERE deleted_at IS NULL
+    `).all();
+
+    const chunks = chunksResult.results as any[];
+
+    if (chunks.length === 0) {
+      return Response.json({
+        success: true,
+        data: {
+          results: [],
+          message: 'No chunks in database',
+        },
+      } satisfies APIResponse);
+    }
+
+    // Use first chunk's embedding as query
+    const firstChunk = chunks[0];
+    const queryEmbedding = firstChunk.embedding ? decodeFloat32Array(firstChunk.embedding) : [];
+
+    console.log(`Query embedding dim: ${queryEmbedding.length}`);
+    console.log(`Total chunks: ${chunks.length}`);
+
+    // Calculate similarities
+    const results: SearchResult[] = [];
+    for (const row of chunks) {
+      if (!row.embedding) continue;
+
+      try {
+        const chunkEmbedding = decodeFloat32Array(row.embedding);
+        const similarity = cosineSimilarity(queryEmbedding, chunkEmbedding);
+
+        console.log(`Chunk ${row.id}: dim=${chunkEmbedding.length}, similarity=${similarity}`);
+
+        results.push({
+          id: row.id,
+          filePath: row.file_path,
+          content: row.content,
+          startLine: row.start_line,
+          endLine: row.end_line,
+          language: row.language,
+          score: similarity,
+        });
+      } catch (error) {
+        console.error(`Failed to process chunk ${row.id}:`, error);
+        continue;
+      }
+    }
+
+    // Sort by score descending
+    results.sort((a, b) => b.score - a.score);
+
+    return Response.json({
+      success: true,
+      data: {
+        results,
+        queryUsed: `Using embedding from chunk: ${firstChunk.id}`,
+        queryDim: queryEmbedding.length,
+        total: results.length,
+      },
+    } satisfies APIResponse);
+  } catch (error) {
+    return Response.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Search failed',
+    } satisfies APIResponse, { status: 500 });
+  }
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Calculate SHA-256 checksum
+ */
+async function calculateChecksum(content: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(content);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Detect language from file path
+ */
+function detectLanguage(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase();
+  const languageMap: Record<string, string> = {
+    'ts': 'typescript',
+    'js': 'javascript',
+    'tsx': 'typescript',
+    'jsx': 'javascript',
+    'py': 'python',
+    'rs': 'rust',
+    'go': 'go',
+    'java': 'java',
+    'cpp': 'cpp',
+    'c': 'c',
+    'h': 'c',
+    'cs': 'csharp',
+    'php': 'php',
+    'rb': 'ruby',
+    'kt': 'kotlin',
+    'swift': 'swift',
+    'sh': 'shell',
+    'yaml': 'yaml',
+    'yml': 'yaml',
+    'json': 'json',
+    'md': 'markdown',
+  };
+  return languageMap[ext || ''] || 'text';
+}
+
+/**
+ * Chunk file content into smaller pieces
+ */
+interface Chunk {
+  content: string;
+  startLine: number;
+  endLine: number;
+  language: string;
+}
+
+function chunkFile(filePath: string, content: string, language: string): Chunk[] {
+  const lines = content.split('\n');
+  const chunks: Chunk[] = [];
+  const maxLinesPerChunk = 50;
+
+  let startLine = 0;
+  while (startLine < lines.length) {
+    const endLine = Math.min(startLine + maxLinesPerChunk, lines.length);
+    const chunkContent = lines.slice(startLine, endLine).join('\n');
+
+    // Skip empty chunks
+    if (chunkContent.trim().length > 0) {
+      chunks.push({
+        content: chunkContent,
+        startLine: startLine + 1,  // 1-indexed
+        endLine: endLine,
+        language,
+      });
+    }
+
+    startLine = endLine;
+  }
+
+  return chunks;
+}
+
+/**
+ * Generate embedding using Cloudflare Workers AI
+ */
+async function generateEmbedding(ctx: RequestContext, text: string): Promise<number[]> {
+  try {
+    const model = ctx.env.EMBEDDING_MODEL || '@cf/baai/bge-small-en-v1.5';
+
+    // Call Workers AI with correct format for text embeddings
+    const response = await ctx.env.AI.run(model, {
+      text: [text]
+    }) as {
+      data?: number[][];
+      shape?: number[];
+    };
+
+    if (!response || !response.data || !response.data[0] || response.data[0].length === 0) {
+      throw new Error('Invalid embedding response');
+    }
+
+    return response.data[0];
+  } catch (error) {
+    console.error('Failed to generate embedding:', error);
+    throw new Error(`Embedding generation failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * Encode Float32Array as BLOB for storage
+ */
+function encodeFloat32Array(array: number[]): Uint8Array {
+  const float32Array = new Float32Array(array);
+  return new Uint8Array(float32Array.buffer);
+}
+
+/**
+ * Decode BLOB to Float32Array
+ * Handles different types that D1 might return
+ */
+function decodeFloat32Array(blob: Uint8Array | any): number[] {
+  // Handle D1 BLOB response
+  let bytes: Uint8Array;
+
+  if (blob instanceof Uint8Array) {
+    bytes = blob;
+  } else if (Array.isArray(blob)) {
+    // D1 might return as Array
+    bytes = new Uint8Array(blob);
+  } else if (blob && typeof blob === 'object') {
+    // Try to extract buffer from object
+    if (blob.buffer instanceof ArrayBuffer) {
+      bytes = new Uint8Array(blob.buffer);
+    } else {
+      // Last resort: create Uint8Array from the object
+      bytes = new Uint8Array(Object.values(blob));
+    }
+  } else {
+    console.error('Unexpected blob type:', typeof blob, blob);
+    return [];
+  }
+
+  console.log(`Decoding: bytes.length=${bytes.length}, expected dims=${bytes.length / 4}`);
+
+  const float32Array = new Float32Array(bytes.buffer);
+  return Array.from(float32Array);
+}
+
+/**
+ * Calculate cosine similarity between two vectors
+ */
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) {
+    throw new Error('Vector dimensions must match');
+  }
+
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+
+  const denominator = Math.sqrt(normA) * Math.sqrt(normB);
+  if (denominator === 0) return 0;
+
+  return dotProduct / denominator;
+}
+
 // ============================================================================
 // WORKER EXPORT
 // ============================================================================
@@ -351,6 +853,10 @@ router.get('/health', healthCheck);
 router.post('/api/index', indexCode);
 router.post('/api/search', searchCode);
 router.get('/api/stats', getStats);
+
+// Debug endpoints (for local testing without AI binding)
+router.get('/api/debug/chunks', getRawChunks);
+router.post('/api/debug/search-similarity', searchWithSimilarity);
 
 /**
  * Cloudflare Worker fetch handler
