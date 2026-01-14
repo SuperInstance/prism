@@ -1,16 +1,19 @@
 {
   "name": "claudes-friend",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A Cloudflare Worker-powered AI companion for Claude Code, built entirely on the free tier",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "src/worker.ts",
   "scripts": {
     "dev": "wrangler dev",
+    "dev:worker": "wrangler dev",
     "deploy": "wrangler deploy",
+    "deploy:prod": "wrangler deploy --env production",
     "deploy:gateway": "wrangler deploy --name api-gateway",
     "deploy:orchestrator": "wrangler deploy --name orchestrator",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
+    "test:worker": "vitest tests/integration/worker.test.ts",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write src/",
@@ -18,10 +21,15 @@
     "build": "npm run build:wasm && npm run build:ts",
     "build:wasm": "cd prism/prism-indexer && ./build.sh",
     "build:ts": "tsc",
-    "db:migrate": "wrangler d1 execute claudes-friend-db --file=./migrations/001_initial.sql",
+    "db:create": "wrangler d1 create claudes-friend-db",
+    "db:migrate": "wrangler d1 execute claudes-friend-db --file=./migrations/001_initial.sql && wrangler d1 execute claudes-friend-db --file=./migrations/002_vector_index.sql",
+    "db:migrate:initial": "wrangler d1 execute claudes-friend-db --file=./migrations/001_initial.sql",
+    "db:migrate:vectors": "wrangler d1 execute claudes-friend-db --file=./migrations/002_vector_index.sql",
     "db:backup": "wrangler d1 export claudes-friend-db --output=./backups/db.sql",
+    "kv:create": "wrangler kv:namespace create PRISM_INDEX",
     "vectorize:create": "wrangler vectorize create claudes-companion --dimensions=384 --metric=cosine",
-    "vectorize:list": "wrangler vectorize list"
+    "vectorize:list": "wrangler vectorize list",
+    "deploy:full": "npm run db:create && npm run db:migrate && npm run kv:create && npm run vectorize:create && npm run deploy"
   },
   "keywords": [
     "cloudflare",
@@ -36,7 +44,8 @@
   "license": "MIT",
   "dependencies": {
     "@cloudflare/workers-types": "^4.20241218.0",
-    "itty-router": "^5.0.0"
+    "itty-router": "^5.0.0",
+    "hnswlib-node": "^1.4.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

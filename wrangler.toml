@@ -2,7 +2,7 @@
 # https://developers.cloudflare.com/workers/wrangler/configuration/
 
 name = "claudes-friend"
-main = "src/index.ts"
+main = "src/worker.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat_v2"]
 
@@ -127,7 +127,7 @@ command = "npm run build"
 
 [build.upload]
 format = "modules"
-main = "./dist/index.js"
+main = "./dist/worker.js"
 
 # ============================================
 # Limits and Rules
