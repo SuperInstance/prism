@@ -1,0 +1,174 @@
+# Cloudflare Workers Configuration
+# https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "claudes-friend"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat_v2"]
+
+# Account configuration
+# account_id = "" # Uncomment and add your account ID
+
+# Analytics Engine (optional)
+# [analytics]
+#   enabled = true
+
+# ============================================
+# API Gateway Worker
+# ============================================
+
+[env.production]
+name = "api-gateway"
+routes = [
+  { pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }
+]
+
+# ============================================
+# D1 Database Bindings
+# ============================================
+
+[[d1_databases]]
+binding = "DB"
+database_name = "claudes-friend-db"
+database_id = "" # Add your D1 database ID after creation
+
+# ============================================
+# KV Namespace Bindings
+# ============================================
+
+[[kv_namespaces]]
+binding = "KV"
+id = "" # Add your KV namespace ID after creation
+
+# ============================================
+# R2 Bucket Bindings
+# ============================================
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "claudes-friend-storage"
+
+# ============================================
+# Vectorize Index Bindings
+# ============================================
+
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "claudes-companion"
+
+# ============================================
+# Durable Objects Bindings
+# ============================================
+
+[[durable_objects.bindings]]
+name = "SESSIONS"
+class_name = "SessionDurableObject"
+
+# Migrations for Durable Objects
+[[migrations]]
+tag = "v1"
+new_classes = ["SessionDurableObject"]
+
+# ============================================
+# Workers AI Binding
+# ============================================
+
+[ai]
+binding = "AI"
+
+# ============================================
+# Environment Variables
+# ============================================
+
+[vars]
+ENVIRONMENT = "production"
+LOG_LEVEL = "info"
+DEFAULT_MODEL = "@cf/meta/llama-3.1-8b-instruct-fp8-fast"
+EMBEDDING_MODEL = "@cf/baai/bge-small-en-v1.5"
+MAX_TOKENS = "2048"
+TEMPERATURE = "0.7"
+
+# Free Tier Limits (for monitoring)
+MAX_NEURONS_PER_DAY = "10000"
+MAX_REQUESTS_PER_DAY = "100000"
+MAX_KV_READS_PER_DAY = "100000"
+MAX_KV_WRITES_PER_DAY = "1000"
+MAX_D1_READS_PER_DAY = "5000000"
+MAX_D1_WRITES_PER_DAY = "100000"
+
+# ============================================
+# Development Environment
+# ============================================
+
+[env.development]
+name = "claudes-friend-dev"
+
+[env.development.vars]
+ENVIRONMENT = "development"
+LOG_LEVEL = "debug"
+
+# ============================================
+# Testing Environment
+# ============================================
+
+[env.test]
+name = "claudes-friend-test"
+
+[env.test.vars]
+ENVIRONMENT = "test"
+LOG_LEVEL = "error"
+
+# ============================================
+# Workers Build Configuration
+# ============================================
+
+[build]
+command = "npm run build"
+
+[build.upload]
+format = "modules"
+main = "./dist/index.js"
+
+# ============================================
+# Limits and Rules
+# ============================================
+
+# CPU time limit (ms)
+[limits]
+cpu_ms = 50
+
+# ============================================
+# Triggers
+# ============================================
+
+# Cron triggers for scheduled tasks
+[triggers]
+crons = ["0 * * * *"] # Run every hour
+
+# ============================================
+# Placement
+# ============================================
+
+# For Durable Objects placement
+[placement]
+mode = "smart"
+
+# ============================================
+# Observability
+# ============================================
+
+# Logging
+[observability]
+enabled = true
+
+# Log forwarding (optional)
+# logpush = true
+
+# ============================================
+# Usage Model
+# ============================================
+
+# Standard usage model for paid plans
+# Uncomment when upgrading from free tier
+# [usage_model]
+#   model = "standard"

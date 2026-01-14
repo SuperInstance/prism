@@ -1,0 +1,49 @@
+# Prism Cloudflare Worker Configuration
+# This file configures the Prism deployment to Cloudflare Workers
+
+name = "prism"
+main = "dist/worker.js"
+compatibility_date = "2024-01-01"
+
+# Environment variables
+[vars]
+ENVIRONMENT = "production"
+
+# Development environment
+[env.development]
+name = "prism-dev"
+vars = { ENVIRONMENT = "development" }
+
+# D1 Database (SQLite)
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "prism-db"
+database_id = "" # Set with CF_D1_DATABASE_ID
+
+# KV Namespace (for caching)
+[[env.production.kv_namespaces]]
+binding = "KV"
+id = "" # Set with CF_KV_NAMESPACE_ID
+
+# R2 Storage (for files)
+[[env.production.r2_buckets]]
+binding = "R2"
+bucket_name = "prism-storage"
+
+# Vectorize (for vector search)
+[[env.production.vectorize]]
+binding = "VECTORIZE"
+index_name = "prism-vectors"
+
+# Build configuration
+[build]
+command = "npm run build"
+cwd = "."
+
+# Worker configuration
+[worker_dev]
+port = 8787
+
+# Secrets (set with: wrangler secret put <NAME>)
+# ANTHROPIC_API_KEY
+# CF_API_TOKEN

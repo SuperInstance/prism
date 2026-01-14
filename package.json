@@ -1,0 +1,55 @@
+{
+  "name": "claudes-friend",
+  "version": "0.1.0",
+  "description": "A Cloudflare Worker-powered AI companion for Claude Code, built entirely on the free tier",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:gateway": "wrangler deploy --name api-gateway",
+    "deploy:orchestrator": "wrangler deploy --name orchestrator",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write src/",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run build:wasm && npm run build:ts",
+    "build:wasm": "cd prism/prism-indexer && ./build.sh",
+    "build:ts": "tsc",
+    "db:migrate": "wrangler d1 execute claudes-friend-db --file=./migrations/001_initial.sql",
+    "db:backup": "wrangler d1 export claudes-friend-db --output=./backups/db.sql",
+    "vectorize:create": "wrangler vectorize create claudes-companion --dimensions=384 --metric=cosine",
+    "vectorize:list": "wrangler vectorize list"
+  },
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "ai",
+    "rag",
+    "vector-database",
+    "serverless",
+    "claude-code"
+  ],
+  "author": "Claude's Friend Contributors",
+  "license": "MIT",
+  "dependencies": {
+    "@cloudflare/workers-types": "^4.20241218.0",
+    "itty-router": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@typescript-eslint/eslint-plugin": "^8.19.1",
+    "@typescript-eslint/parser": "^8.19.1",
+    "@vitest/coverage-v8": "^2.1.8",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "wrangler": "^3.101.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

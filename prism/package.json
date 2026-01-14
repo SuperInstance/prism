@@ -1,0 +1,126 @@
+{
+  "name": "prism",
+  "version": "0.1.0",
+  "description": "AI-powered codebase indexer and RAG engine for Claude Code",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "prism": "./dist/cli/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli/index.d.ts",
+      "import": "./dist/cli/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "prism-indexer/pkg",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "tsx watch src/cli/index.ts",
+    "build": "npm run build:ts && npm run build:wasm",
+    "build:ts": "tsc",
+    "build:wasm": "cd prism-indexer && wasm-pack build --target web --release && cd ..",
+    "build:node": "cd prism-indexer && wasm-pack build --target nodejs --release && cd ..",
+    "test": "vitest",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:ollama": "vitest run tests/ollama",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rm -rf dist prism-indexer/pkg prism-indexer/target node_modules/.cache",
+    "setup": "npm run setup:rust && npm install",
+    "setup:rust": "rustup target add wasm32-unknown-unknown && cargo install wasm-pack",
+    "setup:ollama": "bash scripts/setup-ollama.sh",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build",
+    "prepare": "husky install || true"
+  },
+  "keywords": [
+    "code-search",
+    "rag",
+    "codebase-indexer",
+    "claude-code",
+    "vector-search",
+    "semantic-search",
+    "ai",
+    "code-intelligence",
+    "tree-sitter",
+    "wasm"
+  ],
+  "author": "Claude's Friend Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/claudes-friend/prism.git"
+  },
+  "bugs": {
+    "url": "https://github.com/claudes-friend/prism/issues"
+  },
+  "homepage": "https://github.com/claudes-friend/prism#readme",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.0",
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cli-progress": "^3.11.6",
+    "@types/inquirer": "^9.0.9",
+    "@types/js-yaml": "^4.0.9",
+    "better-sqlite3": "^12.6.0",
+    "chalk": "^5.3.0",
+    "cli-progress": "^3.12.0",
+    "cli-table3": "^0.6.5",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "fs-extra": "^11.3.3",
+    "globby": "^16.1.0",
+    "inquirer": "^13.2.0",
+    "js-yaml": "^4.1.1",
+    "ora": "^8.0.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^20.11.5",
+    "@typescript-eslint/eslint-plugin": "^7.0.1",
+    "@typescript-eslint/parser": "^7.0.1",
+    "@vitest/coverage-v8": "^2.0.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2",
+    "prettier": "^3.2.5",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3",
+    "vitest": "^2.0.0"
+  },
+  "peerDependencies": {
+    "wrangler": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "wrangler": {
+      "optional": true
+    }
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ]
+  }
+}

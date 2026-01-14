@@ -1,0 +1,52 @@
+[package]
+name = "prism-indexer"
+version = "0.1.0"
+edition = "2021"
+authors = ["Claude's Friend Team"]
+license = "MIT"
+description = "Fast codebase indexer using Tree-sitter compiled to WASM"
+repository = "https://github.com/claudes-friend/prism"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Tree-sitter core
+tree-sitter = "0.25"
+
+# Language grammars
+tree-sitter-typescript = "0.23"
+tree-sitter-javascript = "0.25"
+tree-sitter-python = "0.25"
+tree-sitter-rust = "0.25"
+tree-sitter-go = "0.25"
+tree-sitter-java = "0.25"
+
+# WASM support
+wasm-bindgen = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Utilities
+console_error_panic_hook = "0.1"
+uuid = { version = "1.0", features = ["serde", "v4"] }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[profile.release]
+opt-level = "z"        # Optimize for size
+lto = true            # Link-time optimization
+codegen-units = 1     # Better optimization
+strip = true          # Remove debug symbols
+panic = "abort"       # Reduce binary size
+
+[profile.release.package."*"]
+opt-level = "z"       # Optimize dependencies for size too
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Oz", "--enable-mutable-globals"]

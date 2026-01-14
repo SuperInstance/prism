@@ -1,0 +1,138 @@
+# ============================================
+# Development Environment Variables
+# ============================================
+# Copy this file to .dev.vars and fill in your values
+# .dev.vars is automatically loaded by wrangler dev
+
+# ============================================
+# API Configuration
+# ============================================
+# Secret key for API authentication (generate a strong random string)
+API_SECRET=your-api-secret-here-change-me
+
+# JWT secret for session tokens (generate a strong random string)
+JWT_SECRET=your-jwt-secret-here-change-me
+
+# CORS allowed origins (comma-separated list)
+CORS_ORIGINS=http://localhost:8788,http://localhost:3000
+
+# ============================================
+# AI Model Configuration
+# ============================================
+# Default model for chat completions
+DEFAULT_MODEL=@cf/meta/llama-3.1-8b-instruct-fp8-fast
+
+# Model for code-specific tasks
+CODE_MODEL=@cf/qwen/qwen2.5-coder-32b-instruct
+
+# Model for simple/quick tasks
+QUICK_MODEL=@cf/meta/llama-3.2-1b-instruct
+
+# Embedding model for vector search
+EMBEDDING_MODEL=@cf/baai/bge-small-en-v1.5
+
+# Maximum tokens for AI responses
+MAX_TOKENS=2048
+
+# Temperature for AI responses (0.0 - 1.0)
+TEMPERATURE=0.7
+
+# ============================================
+# Vectorize Configuration
+# ============================================
+# Number of dimensions for your embedding model
+# BGE-small = 384, BGE-base = 768, BGE-large = 1024
+VECTOR_DIMENSIONS=384
+
+# Number of results to return from vector search
+DEFAULT_TOP_K=10
+
+# ============================================
+# Feature Flags
+# ============================================
+# Enable response reranking with BGE-reranker
+ENABLE_RERANKING=false
+
+# Enable streaming responses
+ENABLE_STREAMING=true
+
+# Enable usage analytics
+ENABLE_ANALYTICS=true
+
+# Enable content moderation with Llama Guard
+ENABLE_MODERATION=true
+
+# ============================================
+# Rate Limiting
+# ============================================
+# Requests per minute per API key
+RATE_LIMIT_PER_MINUTE=100
+
+# Requests per day per API key
+RATE_LIMIT_PER_DAY=10000
+
+# ============================================
+# Cache Configuration
+# ============================================
+# Default cache TTL in seconds
+DEFAULT_CACHE_TTL=3600
+
+# Embedding cache TTL in seconds (7 days)
+EMBEDDING_CACHE_TTL=604800
+
+# Response cache TTL in seconds (1 hour)
+RESPONSE_CACHE_TTL=3600
+
+# ============================================
+# Logging
+# ============================================
+# Log level: debug, info, warn, error
+LOG_LEVEL=debug
+
+# Enable detailed request logging
+ENABLE_REQUEST_LOGGING=true
+
+# ============================================
+# Database Configuration (D1)
+# ============================================
+# These are automatically set by wrangler, but you can override for testing
+# DB_BINDING=DB
+
+# ============================================
+# Storage Configuration (R2)
+# ============================================
+# Maximum file size for uploads (in bytes, 10MB default)
+MAX_FILE_SIZE=10485760
+
+# Allowed file types (comma-separated)
+ALLOWED_FILE_TYPES=text/plain,application/json,text/markdown,application/pdf
+
+# ============================================
+# Session Configuration (Durable Objects)
+# ============================================
+# Session timeout in milliseconds (30 minutes)
+SESSION_TIMEOUT=1800000
+
+# Maximum concurrent sessions per user
+MAX_CONCURRENT_SESSIONS=5
+
+# ============================================
+# Monitoring & Alerts
+# ============================================
+# Email for usage alerts
+ALERT_EMAIL=
+
+# Alert threshold (percentage of free tier limit)
+ALERT_THRESHOLD=90
+
+# ============================================
+# Development Options
+# ============================================
+# Enable mock AI responses for testing (no actual API calls)
+ENABLE_MOCK_AI=false
+
+# Enable debug middleware
+ENABLE_DEBUG_MIDDLEWARE=true
+
+# Port for development server
+DEV_PORT=8788
