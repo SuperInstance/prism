@@ -1,6 +1,7 @@
 # PRISM Performance Benchmark Results
 
 **Date:** 2026-01-14
+**Version:** 0.3.1
 **Index Size:** 67 files, 549 chunks
 **Embedding Model:** BGE-small-en-v1.5 (384 dimensions)
 
@@ -200,5 +201,21 @@ At small scale (< 1,000 chunks), both implementations perform adequately. The ch
 ---
 
 **Last Updated:** 2026-01-14
-**Benchmark Version:** 0.3.0
+**Benchmark Version:** 0.3.1
 **Tested on:** Cloudflare Workers (free tier)
+
+---
+
+## Version History
+
+### v0.3.1 (2026-01-14)
+- Improved type safety with proper interfaces
+- Added security validations (path traversal, content size)
+- Parallelized embedding generation
+- Better error handling and validation
+- Added comprehensive JSDoc comments
+
+### v0.3.0 (2026-01-14)
+- Initial Vectorize integration
+- Fast ANN vector search
+- Hybrid storage (Vectorize + D1)
