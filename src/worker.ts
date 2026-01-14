@@ -16,6 +16,16 @@
 
 import type { Env } from './types/worker.js';
 import type { ExportedHandler } from '@cloudflare/workers-types';
+import {
+  calculateChecksum,
+  chunkFile,
+  CONFIG,
+  decodeFloat32Array,
+  detectLanguage,
+  encodeFloat32Array,
+  cosineSimilarity,
+  type Chunk,
+} from './shared/utils.js';
 
 // ============================================================================
 // IMPORTS
@@ -672,84 +682,6 @@ async function searchWithSimilarity(request: Request, ctx: RequestContext): Prom
 // ============================================================================
 
 /**
- * Calculate SHA-256 checksum
- */
-async function calculateChecksum(content: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(content);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-/**
- * Detect language from file path
- */
-function detectLanguage(path: string): string {
-  const ext = path.split('.').pop()?.toLowerCase();
-  const languageMap: Record<string, string> = {
-    'ts': 'typescript',
-    'js': 'javascript',
-    'tsx': 'typescript',
-    'jsx': 'javascript',
-    'py': 'python',
-    'rs': 'rust',
-    'go': 'go',
-    'java': 'java',
-    'cpp': 'cpp',
-    'c': 'c',
-    'h': 'c',
-    'cs': 'csharp',
-    'php': 'php',
-    'rb': 'ruby',
-    'kt': 'kotlin',
-    'swift': 'swift',
-    'sh': 'shell',
-    'yaml': 'yaml',
-    'yml': 'yaml',
-    'json': 'json',
-    'md': 'markdown',
-  };
-  return languageMap[ext || ''] || 'text';
-}
-
-/**
- * Chunk file content into smaller pieces
- */
-interface Chunk {
-  content: string;
-  startLine: number;
-  endLine: number;
-  language: string;
-}
-
-function chunkFile(filePath: string, content: string, language: string): Chunk[] {
-  const lines = content.split('\n');
-  const chunks: Chunk[] = [];
-  const maxLinesPerChunk = 50;
-
-  let startLine = 0;
-  while (startLine < lines.length) {
-    const endLine = Math.min(startLine + maxLinesPerChunk, lines.length);
-    const chunkContent = lines.slice(startLine, endLine).join('\n');
-
-    // Skip empty chunks
-    if (chunkContent.trim().length > 0) {
-      chunks.push({
-        content: chunkContent,
-        startLine: startLine + 1,  // 1-indexed
-        endLine: endLine,
-        language,
-      });
-    }
-
-    startLine = endLine;
-  }
-
-  return chunks;
-}
-
-/**
  * Generate embedding using Cloudflare Workers AI
  */
 async function generateEmbedding(ctx: RequestContext, text: string): Promise<number[]> {
@@ -773,70 +705,6 @@ async function generateEmbedding(ctx: RequestContext, text: string): Promise<num
     console.error('Failed to generate embedding:', error);
     throw new Error(`Embedding generation failed: ${error instanceof Error ? error.message : String(error)}`);
   }
-}
-
-/**
- * Encode Float32Array as BLOB for storage
- */
-function encodeFloat32Array(array: number[]): Uint8Array {
-  const float32Array = new Float32Array(array);
-  return new Uint8Array(float32Array.buffer);
-}
-
-/**
- * Decode BLOB to Float32Array
- * Handles different types that D1 might return
- */
-function decodeFloat32Array(blob: Uint8Array | any): number[] {
-  // Handle D1 BLOB response
-  let bytes: Uint8Array;
-
-  if (blob instanceof Uint8Array) {
-    bytes = blob;
-  } else if (Array.isArray(blob)) {
-    // D1 might return as Array
-    bytes = new Uint8Array(blob);
-  } else if (blob && typeof blob === 'object') {
-    // Try to extract buffer from object
-    if (blob.buffer instanceof ArrayBuffer) {
-      bytes = new Uint8Array(blob.buffer);
-    } else {
-      // Last resort: create Uint8Array from the object
-      bytes = new Uint8Array(Object.values(blob));
-    }
-  } else {
-    console.error('Unexpected blob type:', typeof blob, blob);
-    return [];
-  }
-
-  console.log(`Decoding: bytes.length=${bytes.length}, expected dims=${bytes.length / 4}`);
-
-  const float32Array = new Float32Array(bytes.buffer);
-  return Array.from(float32Array);
-}
-
-/**
- * Calculate cosine similarity between two vectors
- */
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) {
-    throw new Error('Vector dimensions must match');
-  }
-
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-
-  for (let i = 0; i < a.length; i++) {
-    dotProduct += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-
-  const denominator = Math.sqrt(normA) * Math.sqrt(normB);
-  if (denominator === 0) return 0;
-
-  return dotProduct / denominator;
 }
 
 // ============================================================================
