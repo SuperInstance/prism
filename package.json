@@ -1,9 +1,9 @@
 {
   "name": "claudes-friend",
-  "version": "0.2.0",
-  "description": "A Cloudflare Worker-powered AI companion for Claude Code, built entirely on the free tier",
+  "version": "0.3.1",
+  "description": "Lightning-fast semantic code search powered by Cloudflare Workers and Vectorize",
   "type": "module",
-  "main": "src/worker.ts",
+  "main": "src/worker-vectorize.ts",
   "bin": {
     "prism": "./prism-cli.js"
   },

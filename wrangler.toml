@@ -137,18 +137,16 @@ command = "npx esbuild src/worker-vectorize.ts --bundle --format=esm --outfile=d
 # ============================================
 # Triggers
 # ============================================
-
-# Cron triggers for scheduled tasks
-[triggers]
-crons = ["0 * * * *"] # Run every hour
+# Cron triggers for scheduled tasks (currently not implemented)
+# [triggers]
+# crons = ["0 * * * *"] # Run every hour
 
 # ============================================
 # Placement
 # ============================================
-
-# For Durable Objects placement
-[placement]
-mode = "smart"
+# Placement mode (only needed with Durable Objects)
+# [placement]
+# mode = "smart"
 
 # ============================================
 # Observability

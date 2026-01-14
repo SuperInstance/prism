@@ -11,27 +11,32 @@
  * - Metadata filtering support
  * - Automatic scaling
  *
- * @version 0.3.1
+ * @version 0.3.2
  */
 
-// ============================================
-// Constants
-// ============================================
+// ============================================================================
+// Imports
+// ============================================================================
 
-const CONFIG = {
-  MAX_CHUNKS_PER_FILE: 1000,
-  MAX_LINES_PER_CHUNK: 50,
-  MIN_CHUNK_CONTENT_LENGTH: 1,
-  MAX_SEARCH_LIMIT: 100,
-  DEFAULT_SEARCH_LIMIT: 10,
-  MAX_FILES_PER_BATCH: 100,
-  MAX_EMBEDDING_CONCURRENCY: 10,
-  EMBEDDING_DIMENSIONS: 384,
-} as const;
+import {
+  calculateChecksum,
+  chunkFile,
+  CONFIG,
+  decodeFloat32Array,
+  detectLanguage,
+  encodeFloat32Array,
+  errorResponse,
+  jsonResponse,
+  sanitizeQuery,
+  type Chunk,
+  validateContent,
+  validatePath,
+  CORS_HEADERS,
+} from "./shared/utils.js";
 
-// ============================================
+// ============================================================================
 // Type Definitions
-// ============================================
+// ============================================================================
 
 interface VectorizeVector {
   id: string;
@@ -60,13 +65,6 @@ interface VectorizeFilter {
 interface VectorizeQueryResult {
   matches: VectorizeMatch[];
   count?: number;
-}
-
-interface Chunk {
-  content: string;
-  startLine: number;
-  endLine: number;
-  language: string;
 }
 
 interface IndexRequest {
@@ -199,103 +197,6 @@ class WorkerRouter {
 // Utility Functions
 // ============================================
 
-/**
- * Calculate SHA-256 checksum of content
- * @param content - Text content to hash
- * @returns Hex-encoded SHA-256 hash
- */
-async function calculateChecksum(content: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(content);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-/**
- * Detect programming language from file path
- * @param path - File path
- * @returns Detected language or "text"
- */
-function detectLanguage(path: string): string {
-  const ext = path.split(".").pop()?.toLowerCase();
-  const languageMap: Record<string, string> = {
-    ts: "typescript",
-    tsx: "typescript",
-    js: "javascript",
-    jsx: "javascript",
-    py: "python",
-    rs: "rust",
-    go: "go",
-    java: "java",
-    cpp: "cpp",
-    cc: "cpp",
-    cxx: "cpp",
-    c: "c",
-    h: "c",
-    cs: "csharp",
-    php: "php",
-    rb: "ruby",
-    kt: "kotlin",
-    swift: "swift",
-    sh: "shell",
-    bash: "shell",
-    zsh: "shell",
-    yaml: "yaml",
-    yml: "yaml",
-    json: "json",
-    md: "markdown",
-    toml: "toml",
-    xml: "xml",
-    html: "html",
-    css: "css",
-    scss: "scss",
-    sql: "sql",
-  };
-  return languageMap[ext || ""] || "text";
-}
-
-/**
- * Split file content into chunks
- * @param filePath - File path for error reporting
- * @param content - File content
- * @param language - Detected language
- * @returns Array of chunks
- * @throws Error if content is too large
- */
-function chunkFile(filePath: string, content: string, language: string): Chunk[] {
-  const lines = content.split("\n");
-  const chunks: Chunk[] = [];
-  const maxLinesPerChunk = CONFIG.MAX_LINES_PER_CHUNK;
-  let startLine = 0;
-
-  while (startLine < lines.length) {
-    const endLine = Math.min(startLine + maxLinesPerChunk, lines.length);
-    const chunkContent = lines.slice(startLine, endLine).join("\n");
-
-    // Only include non-empty chunks
-    if (chunkContent.trim().length >= CONFIG.MIN_CHUNK_CONTENT_LENGTH) {
-      chunks.push({
-        content: chunkContent,
-        startLine: startLine + 1, // 1-indexed
-        endLine,
-        language
-      });
-    }
-
-    startLine = endLine;
-  }
-
-  // Validate chunk count
-  if (chunks.length > CONFIG.MAX_CHUNKS_PER_FILE) {
-    throw new Error(
-      `File ${filePath} has too many chunks (${chunks.length}). ` +
-      `Maximum allowed: ${CONFIG.MAX_CHUNKS_PER_FILE}`
-    );
-  }
-
-  return chunks;
-}
 
 /**
  * Generate embedding for text using Workers AI
@@ -333,98 +234,6 @@ async function generateEmbedding(
   }
 }
 
-/**
- * Encode float array to Uint8Array for D1 BLOB storage
- * @param array - Float array to encode
- * @returns Uint8Array representation
- */
-function encodeFloat32Array(array: number[]): Uint8Array {
-  const float32Array = new Float32Array(array);
-  return new Uint8Array(float32Array.buffer);
-}
-
-/**
- * Decode D1 BLOB to float array
- * @param blob - Blob from D1 (various formats)
- * @returns Float array
- */
-function decodeFloat32Array(blob: Uint8Array | ArrayLike<number> | Record<string, unknown>): number[] {
-  let bytes: Uint8Array;
-
-  if (blob instanceof Uint8Array) {
-    bytes = blob;
-  } else if (Array.isArray(blob)) {
-    bytes = new Uint8Array(blob);
-  } else if (blob && typeof blob === 'object') {
-    if (blob.buffer instanceof ArrayBuffer) {
-      bytes = new Uint8Array(blob.buffer);
-    } else {
-      // Handle D1 object format
-      bytes = new Uint8Array(Object.values(blob).filter((v): v is number => typeof v === 'number'));
-    }
-  } else {
-    throw new Error(`Invalid blob type: ${typeof blob}`);
-  }
-
-  if (bytes.length % 4 !== 0) {
-    throw new Error(`Invalid blob length for float32: ${bytes.length} (must be multiple of 4)`);
-  }
-
-  const float32Array = new Float32Array(bytes.buffer);
-  return Array.from(float32Array);
-}
-
-/**
- * Validate file path to prevent path traversal attacks
- * @param path - File path to validate
- * @returns True if valid
- * @throws Error if path contains suspicious patterns
- */
-function validatePath(path: string): void {
-  // Check for path traversal attempts
-  if (path.includes('..') || path.includes('~')) {
-    throw new Error(`Invalid file path: ${path}`);
-  }
-
-  // Check for absolute paths (not allowed in Workers)
-  if (path.startsWith('/') || /^[A-Za-z]:/.test(path)) {
-    throw new Error(`Absolute paths not allowed: ${path}`);
-  }
-
-  // Check for null bytes
-  if (path.includes('\0')) {
-    throw new Error(`Null bytes not allowed in path`);
-  }
-}
-
-/**
- * Validate file content
- * @param path - File path for error reporting
- * @param content - File content
- * @throws Error if content is invalid
- */
-function validateContent(path: string, content: string): void {
-  if (typeof content !== 'string') {
-    throw new Error(`Invalid content type for ${path}`);
-  }
-
-  if (content.length === 0) {
-    throw new Error(`Empty file content: ${path}`);
-  }
-
-  if (content.length > 10_000_000) { // 10MB limit
-    throw new Error(`File too large: ${path} (${content.length} bytes)`);
-  }
-}
-
-/**
- * Sanitize search query
- * @param query - Search query
- * @returns Sanitized query
- */
-function sanitizeQuery(query: string): string {
-  return query.trim().slice(0, 1000); // Max 1000 chars
-}
 
 /**
  * Apply additional filters to search results
