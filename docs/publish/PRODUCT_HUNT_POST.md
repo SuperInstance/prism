@@ -49,10 +49,10 @@ prism search "user authentication flow"
 
 ## ✨ Key Features
 
-### ⚡ Blazing Fast
-- **100K+ files**: Search in <400ms
-- **Scales logarithmically**: 1M files still <500ms
-- **177x faster** than grep at scale
+### ⚡ Fast Vector Search
+- **31ms median query latency** via Cloudflare Vectorize¹
+- **>95% accuracy** with refinement
+- **Logarithmic scaling** (performance degrades slowly with size)
 
 ### 🎯 Semantic Understanding
 - Search by **intent**: "database connection pooling"
@@ -66,16 +66,22 @@ prism search "user authentication flow"
 
 ### 🔍 Smart Filters
 - Filter by language, path, date range
-- Incremental indexing (21x faster reindex)
+- Incremental indexing (skip unchanged files)
 - SHA-256 change detection
 
 ## 📊 Performance Benchmarks
 
-| Scale | Grep | PRISM | Speedup |
-|-------|------|-------|---------|
-| 10K files | 7.0s | 378ms | **18x** |
-| 100K files | 70s | 396ms | **177x** |
-| 1M files | 11.6 min | 432ms | **1,600x** |
+**Measured Performance (549 chunks across 67 files):**
+- Average search time: 360ms
+- Median search time: 350ms
+- Fastest query: 228ms
+
+**Cloudflare Vectorize Benchmarks:**
+- 31ms median query latency (P50)
+- >95% accuracy with refinement
+- Scales logarithmically with dataset size
+
+*Source: [Benchmark Results](https://github.com/SuperInstance/PRISM/blob/main/docs/benchmark-results.md)*
 
 ## 🚀 Quick Start
 
@@ -261,7 +267,7 @@ No more guessing function names. Just describe what you're looking for:
 
 "database connection pooling" → Finds ALL related code
 
-⚡ 177x faster than grep at scale
+⚡ Fast semantic search with Vectorize (31ms median query latency)
 🆓 Free tier (Cloudflare Workers)
 🎯 Semantic, not just keywords
 
@@ -282,7 +288,7 @@ After struggling with code search in large repositories, I built a tool that:
 • Works on private repos for free
 • Scales logarithmically using vector embeddings
 
-Built on Cloudflare Workers and Vectorize, it's 177x faster than traditional grep at scale.
+Built on Cloudflare Workers and Vectorize, it provides fast semantic search for any codebase size.
 
 Try it: [Product Hunt Link]
 
@@ -293,7 +299,7 @@ Would love feedback from the developer community! 🚀
 
 ### Hacker News
 ```
-Title: PRISM: Lightning-Fast Semantic Code Search (177x faster than grep)
+Title: PRISM: Semantic Code Search with Vector Embeddings
 
 URL: [GitHub repo]
 
@@ -301,10 +307,10 @@ Summary:
 I built PRISM, a semantic code search engine that uses vector embeddings to find code by meaning, not keywords.
 
 Key features:
-- Sub-second search even for 1M+ files
+- Measured at 360ms average search time (549 chunks)
 - Semantic understanding (finds "login", "auth", "signin" when searching "authentication")
 - Built on Cloudflare Workers (free tier)
-- 177x faster than grep at scale
+- Uses Vectorize ANN indexing (31ms median query latency)
 
 Open source: MIT license
 
@@ -315,7 +321,11 @@ Would love feedback from the HN community!
 
 ## Sources & References
 
-Based on research from:
+Performance data from:
+- [Cloudflare Workers AI - Bigger, Better, Faster](https://blog.cloudflare.com/workers-ai-bigger-better-faster/) (31ms median Vectorize query latency)
+- [PRISM Benchmark Results](https://github.com/SuperInstance/PRISM/blob/main/docs/benchmark-results.md) (360ms measured average)
+
+Product Hunt launch guides:
 - [Ultimate Guide on Product Hunt Launch for Dev Tools](https://medium.com/@krunchdataio/ultimate-guide-on-product-hunt-launch-for-dev-tools-8239882c962c)
 - [Product Hunt for DevTools FAQ](https://dev.to/fmerian/faq-product-hunt-for-devtools-2c09)
 - [Awesome Developer Tools on Product Hunt](https://github.com/fmerian/awesome-product-hunt)

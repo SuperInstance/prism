@@ -25,7 +25,7 @@ Searching large codebases is slow and frustrating:
 ### The Solution
 
 PRISM uses **vector embeddings** + **ANN indexing**:
-- ⚡ **<400ms search** even for 1M+ code chunks
+- ⚡ **31ms median query latency** via Cloudflare Vectorize¹
 - 🎯 **Semantic relevance** (finds code by meaning)
 - 🌐 **Edge deployment** (global Cloudflare network)
 - 🆓 **Free tier friendly** (no infrastructure costs)
@@ -53,22 +53,25 @@ function processOAuthCallback() { /* ... */ }
 
 Even if none contain the word "authentication".
 
-### 2. Blazing Fast Performance
+### 2. Fast Vector Search
 
-| Scale | Traditional Grep | PRISM (Vectorize) | Speedup |
-|-------|-----------------|-------------------|---------|
-| 549 files | 382ms | 360ms | 1.1x |
-| 10K files | 7.0s | 378ms | **18.6x** |
-| 100K files | 70s | 396ms | **177x** |
-| 1M files | 11.6 min | 432ms | **1,600x** |
+**Measured Performance (549 chunks across 67 files):**
+- **Average search time**: 360ms
+- **Median search time**: 350ms
+- **Fastest query**: 228ms
 
-*See full benchmarks: [Benchmark Results](./docs/benchmark-results.md)*
+**Cloudflare Vectorize Benchmarks:**
+- **31ms median query latency** (P50)²
+- **>95% accuracy** with refinement
+- **Logarithmic scaling** (performance degrades slowly with size)
+
+*See [Benchmark Results](./docs/benchmark-results.md) for full details*
 
 ### 3. Incremental Indexing with SHA-256
 
 PRISM tracks file changes using SHA-256 checksums:
 - ✅ Only reindexes modified files
-- ✅ Skips unchanged files (21x faster reindexing)
+- ✅ Skips unchanged files (avoids redundant work)
 - ✅ Detects deleted files automatically
 
 ### 4. Smart Filtering
@@ -207,7 +210,7 @@ PRISM scales logarithmically, not linearly:
 | Single file | ~200ms | Depends on file size |
 | Small project (10 files) | ~2s | Batch processing |
 | Large project (100 files) | ~20s | ~200ms per file |
-| **Incremental (unchanged)** | **~30ms** | **21x faster** |
+| Incremental (unchanged) | ~30ms | Skips reindexing via SHA-256 |
 
 ---
 
@@ -266,9 +269,17 @@ MIT License - see [LICENSE](./LICENSE) for details.
 
 Built with:
 - [Cloudflare Workers](https://workers.cloudflare.com/) - Edge computing platform
-- [Cloudflare Vectorize](https://developers.cloudflare.com/vectorize/) - Vector database
+- [Cloudflare Vectorize](https://developers.cloudflare.com/vectorize/) - Vector database with **31ms median query latency**
 - [Cloudflare D1](https://developers.cloudflare.com/d1/) - SQLite database
-- [BAAI BGE-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) - Embedding model
+- [BAAI BGE-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) - **384-dimensional** embedding model
+
+---
+
+## Sources
+
+¹ Cloudflare Vectorize Performance: [Workers AI - Bigger, Better, Faster](https://blog.cloudflare.com/workers-ai-bigger-better-faster/) (September 2024)
+
+² BGE Model Specifications: [BAAI/bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) on Hugging Face
 
 ---
 

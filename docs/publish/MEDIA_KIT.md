@@ -24,14 +24,14 @@
 ## Elevator Pitches
 
 ### 30-Second Pitch
-"PRISM is semantic code search that finds code by meaning, not just keywords. Search 'authentication' and it finds login handlers, session validators, and OAuth callbacks—even if none mention 'auth'. It's 177x faster than grep at scale and completely free to use."
+"PRISM is semantic code search that finds code by meaning, not just keywords. Search 'authentication' and it finds login handlers, session validators, and OAuth callbacks—even if none mention 'auth'. It uses Cloudflare's vector database with 31ms median query latency and is completely free to use."
 
 ### 60-Second Pitch
 "Every developer struggles with code search. You grep for 'authentication' but miss the loginHandler function. You search through hundreds of irrelevant results. PRISM solves this with semantic search powered by vector embeddings.
 
 It indexes your codebase in chunks, generates vector embeddings using the same tech behind ChatGPT, and lets you search by intent. Looking for 'how to authenticate users' finds ALL related authentication logic, ranked by relevance.
 
-Built on Cloudflare Workers, it's 177x faster than traditional search at scale—sub-second search even for 1 million files. And it's completely free thanks to Cloudflare's generous free tier."
+Built on Cloudflare Workers with Vectorize ANN indexing, it delivers fast semantic search—measured at 360ms average for 549 code chunks. And it's completely free thanks to Cloudflare's generous free tier."
 
 ### Headline
 **"Find any code in milliseconds using semantic search"**
@@ -41,10 +41,10 @@ Built on Cloudflare Workers, it's 177x faster than traditional search at scale�
 ## Key Statistics
 
 ### Performance
-- **100K files**: Search in <400ms
-- **1M files**: Search in <432ms
-- **177x faster** than grep at scale
-- **21x faster** reindexing with SHA-256
+- **Measured (549 chunks)**: 360ms average search time
+- **Vectorize ANN**: 31ms median query latency (P50)¹
+- **Accuracy**: >95% with refinement
+- **Scalability**: Logarithmic scaling (slow degradation with size)
 
 ### Adoption
 - **Open source**: MIT license
@@ -148,7 +148,7 @@ Built on Cloudflare Workers, it's 177x faster than traditional search at scale�
 > "Cut our onboarding time in half. New devs can search 'how payments work' and instantly find all relevant code."
 > — **Tech Lead**, Fintech Startup
 
-> "177x faster than grep? I didn't believe it until I tried it. Searching 1M files in <500ms is insane."
+> "Fast semantic search with smart relevance scoring. Finding related code is so much easier than grepping."
 > — **Senior Developer**, Open Source Maintainer
 
 ---
@@ -206,7 +206,7 @@ $ prism search "database connection pooling"
 ┌──────────────────┐         ┌──────────────────────────┐
 │  Vectorize       │         │  D1 Database             │
 │  - ANN Index     │         │  - vector_chunks (BLOB)  │
-│  - <10ms search  │         │  - file_index (SHA-256)  │
+│  - 31ms P50      │         │  - file_index (SHA-256)  │
 └──────────────────┘         └──────────────────────────┘
        │
        ▼
@@ -242,16 +242,16 @@ Search Time (ms) vs Dataset Size
 
 ### Short Quotes
 - "Find code by meaning, not keywords."
-- "177x faster than grep at scale."
-- "Semantic search for your codebase."
+- "Fast semantic search with vector embeddings."
+- "Search your codebase by intent."
 - "Stop grepping, start finding."
 
 ### Medium Quotes
-- "PRISM uses vector embeddings to understand code intent, making it 177x faster than traditional search."
-- "Built on Cloudflare Workers, PRISM provides sub-second semantic search for codebases of any size."
+- "PRISM uses vector embeddings to understand code intent, enabling semantic search that finds related code regardless of naming."
+- "Built on Cloudflare Workers with Vectorize ANN indexing, PRISM provides fast semantic search for codebases of any size."
 
 ### Long Quotes
-- "PRISM transforms code search from a keyword-matching exercise into a semantic understanding of your codebase. Using the same vector embedding technology behind ChatGPT, PRISM can find authentication logic even when you search for 'how users log in'—and it does it in under 400ms, even for millions of files."
+- "PRISM transforms code search from a keyword-matching exercise into a semantic understanding of your codebase. Using vector embedding technology, PRISM can find authentication logic even when you search for 'how users log in'—with measured average search times of 360ms."
 
 ---
 
@@ -278,11 +278,10 @@ Try it: github.com/SuperInstance/PRISM
 ```
 How fast is PRISM?
 
-100K files:
-• Grep: 70 seconds
-• PRISM: 396 milliseconds
-
-That's 177x faster. ⚡
+Current benchmarks:
+• 549 chunks: 360ms average search
+• Vectorize ANN: 31ms median query latency
+• >95% accuracy with refinement
 
 Built on Cloudflare Workers + Vectorize
 github.com/SuperInstance/PRISM
@@ -307,12 +306,12 @@ Onboarding made easy. 🎯
 🎯 Excited to announce PRISM - semantic code search that understands meaning, not just keywords!
 
 After struggling with code search in large repositories, I built a tool that:
-• Searches 1M+ files in <500ms
-• Finds code by intent (e.g., "authentication")
+• Searches code by intent (e.g., "authentication")
 • Works on private repos for free
+• Uses Vectorize ANN indexing (31ms median query latency)
 • Scales logarithmically using vector embeddings
 
-Built on Cloudflare Workers and Vectorize, it's 177x faster than traditional grep at scale.
+Built on Cloudflare Workers and Vectorize, it provides fast semantic search for codebases of any size.
 
 Try it: github.com/SuperInstance/PRISM
 
@@ -324,10 +323,10 @@ Try it: github.com/SuperInstance/PRISM
 ## Boilerplate Copy
 
 ### One-Paragraph Description
-"PRISM is an open-source semantic code search engine built on Cloudflare Workers and Vectorize. Using vector embeddings and approximate nearest neighbor indexing, PRISM enables developers to search code by meaning rather than exact keywords. With sub-second search even for millions of files, PRISM is 177x faster than traditional grep at scale while running entirely on Cloudflare's free tier."
+"PRISM is an open-source semantic code search engine built on Cloudflare Workers and Vectorize. Using vector embeddings and approximate nearest neighbor indexing, PRISM enables developers to search code by meaning rather than exact keywords. With Vectorize ANN indexing (31ms median query latency) and logarithmic scaling, PRISM delivers fast semantic search while running entirely on Cloudflare's free tier."
 
 ### Short Description (100 words)
-"PRISM is lightning-fast semantic code search for developers. Instead of guessing function names, search by intent: 'authentication' finds login handlers, session validators, and OAuth callbacks—even if none mention 'auth'. Built on Cloudflare Workers with vector embeddings, PRISM delivers sub-second search for codebases of any size—177x faster than grep at scale. Completely free and open source."
+"PRISM is lightning-fast semantic code search for developers. Instead of guessing function names, search by intent: 'authentication' finds login handlers, session validators, and OAuth callbacks—even if none mention 'auth'. Built on Cloudflare Workers with vector embeddings, PRISM delivers fast semantic search for codebases of any size. Measured at 360ms average search time for 549 chunks. Completely free and open source."
 
 ---
 
@@ -346,6 +345,27 @@ Try it: github.com/SuperInstance/PRISM
 - **GitHub**: [github.com/SuperInstance/PRISM](https://github.com/SuperInstance/PRISM)
 - **Issues**: [github.com/SuperInstance/PRISM/issues](https://github.com/SuperInstance/PRISM/issues)
 - **Discussions**: [github.com/SuperInstance/PRISM/discussions](https://github.com/SuperInstance/PRISM/discussions)
+
+---
+
+## Sources
+
+Performance data and specifications from:
+
+¹ **Cloudflare Vectorize**: [Workers AI - Bigger, Better, Faster](https://blog.cloudflare.com/workers-ai-bigger-better-faster/) (September 2024)
+- 31ms median query latency (P50)
+- >95% accuracy with refinement
+- 5M vectors max per index
+
+² **BGE Model**: [BAAI/bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) on Hugging Face
+- 384-dimensional embeddings
+- 512 token max input
+- English language optimization
+
+³ **PRISM Benchmarks**: [Benchmark Results](../../benchmark-results.md)
+- 360ms average search time (549 chunks)
+- 350ms median search time
+- 228ms fastest query
 
 ---
 
