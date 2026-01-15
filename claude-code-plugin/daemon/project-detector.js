@@ -533,8 +533,7 @@ class ProjectDetector {
 
       for (const [key, variants] of Object.entries(dirMap)) {
         const exists = variants.some(variant =>
-          files.includes(variant) ||
-          (await fs.readdir(this.projectRoot)).includes(variant)
+          files.includes(variant)
         );
         this.projectInfo.directories[key] = exists;
       }

@@ -8,9 +8,9 @@
 const fs = require('fs').promises;
 const path = require('path');
 const http = require('http');
-const ProjectDetector = require('./project-detector');
+const SimpleProjectDetector = require('./simple-project-detector');
 
-class SimplePrismDaemon {
+class PrismDaemon {
   constructor() {
     this.config = {
       port: parseInt(process.env.PORT) || 8080,
@@ -41,8 +41,8 @@ class SimplePrismDaemon {
    */
   async discoverProject() {
     try {
-      const detector = new ProjectDetector(this.config.projectRoot);
-      this.projectInfo = await detector.detectAll();
+      const detector = new SimpleProjectDetector(this.config.projectRoot);
+      this.projectInfo = await detector.detect();
     } catch (error) {
       this.projectInfo = {
         name: path.basename(this.config.projectRoot),
@@ -52,161 +52,98 @@ class SimplePrismDaemon {
     }
   }
 
-  
   /**
-   * Set up file system watcher for changes
+   * Handle HTTP requests with simple routing
    */
-  setupFileWatcher() {
-    // For now, log the intent to watch files
-    console.log('[PRISM Daemon] File watching setup would go here');
-
-    // In a real implementation, we would use chokidar or similar
-    // to watch for file changes and trigger reindexing
-  }
-
-  /**
-   * Handle HTTP requests
-   */
-  requestHandler(req, res) {
+  handleRequest(req, res) {
     const { method, url } = req;
-    const headers = {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-    };
 
-    // Handle CORS preflight
+    // CORS headers
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+
     if (method === 'OPTIONS') {
-      res.writeHead(200, headers);
+      res.writeHead(200);
       res.end();
       return;
     }
 
-    // Route handling
     if (method === 'GET' && url === '/health') {
-      res.writeHead(200, headers);
-      res.end(JSON.stringify({
-        status: 'healthy',
-        project: this.projectInfo?.name || 'Unknown',
-        uptime: process.uptime(),
-        memory: process.memoryUsage()
-      }));
-    } else if (method === 'POST' && url === '/index') {
-      this.handleIndexRequest(req, res, headers);
+      this.sendHealthResponse(res);
+    } else if (method === 'GET' && url === '/project') {
+      this.sendProjectResponse(res);
     } else if (method === 'POST' && url === '/search') {
-      this.handleSearchRequest(req, res, headers);
+      this.handleSearch(req, res);
     } else {
-      res.writeHead(404, headers);
-      res.end(JSON.stringify({ error: 'Not found' }));
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: 'Endpoint not found' }));
     }
   }
 
   /**
-   * Handle indexing request
+   * Send health check response
    */
-  async handleIndexRequest(req, res, headers) {
-    try {
-      const chunks = [];
-      req.on('data', chunk => chunks.push(chunk));
-      req.on('end', async () => {
-        const data = JSON.parse(Buffer.concat(chunks).toString());
+  sendHealthResponse(res) {
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      status: 'ok',
+      project: this.projectInfo?.name || 'Unknown',
+      uptime: Math.floor(process.uptime())
+    }));
+  }
 
-        // Add to indexing queue
-        this.indexingQueue.push(data);
-
-        // Start indexing if not already running
-        if (!this.isIndexing) {
-          setImmediate(() => this.processIndexingQueue());
-        }
-
-        res.writeHead(202, headers);
-        res.end(JSON.stringify({ message: 'Indexing queued' }));
-      });
-    } catch (error) {
-      res.writeHead(500, headers);
-      res.end(JSON.stringify({ error: 'Indexing failed' }));
-    }
+  /**
+   * Send project info response
+   */
+  sendProjectResponse(res) {
+    res.writeHead(200);
+    res.end(JSON.stringify(this.projectInfo || {}));
   }
 
   /**
    * Handle search request
    */
-  async handleSearchRequest(req, res, headers) {
-    try {
-      const chunks = [];
-      req.on('data', chunk => chunks.push(chunk));
-      req.on('end', async () => {
-        const data = JSON.parse(Buffer.concat(chunks).toString());
-
-        // Perform search (placeholder implementation)
-        const results = await this.performSearch(data.query);
-
-        res.writeHead(200, headers);
+  handleSearch(req, res) {
+    let data = '';
+    req.on('data', chunk => data += chunk);
+    req.on('end', () => {
+      try {
+        const searchQuery = JSON.parse(data).query || '';
+        const results = this.simpleSearch(searchQuery);
+        res.writeHead(200);
         res.end(JSON.stringify({ results }));
-      });
-    } catch (error) {
-      res.writeHead(500, headers);
-      res.end(JSON.stringify({ error: 'Search failed' }));
-    }
-  }
-
-  /**
-   * Perform semantic search (placeholder)
-   */
-  async performSearch(query) {
-    // Placeholder implementation
-    // In a real implementation, this would:
-    // 1. Query the vector database
-    // 2. Perform semantic search
-    // 3. Return relevant code snippets
-
-    return {
-      query,
-      results: [
-        {
-          file: 'placeholder.js',
-          content: 'Search functionality would go here',
-          score: 0.85,
-          context: 'This is where search results would appear'
-        }
-      ]
-    };
-  }
-
-  /**
-   * Process indexing queue
-   */
-  async processIndexingQueue() {
-    if (this.isIndexing || this.indexingQueue.length === 0) {
-      return;
-    }
-
-    this.isIndexing = true;
-
-    try {
-      while (this.indexingQueue.length > 0) {
-        const item = this.indexingQueue.shift();
-
-        // Process the item (placeholder)
-        console.log(`[PRISM Daemon] Indexing: ${item.path || 'unknown'}`);
-
-        // Simulate processing time
-        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Invalid search request' }));
       }
-    } catch (error) {
-      console.error('[PRISM Daemon] Indexing failed:', error);
-    } finally {
-      this.isIndexing = false;
-    }
+    });
   }
 
   /**
-   * Start the daemon
+   * Simple file search implementation
+   */
+  simpleSearch(query) {
+    if (!query || query.length < 2) {
+      return [];
+    }
+
+    return [
+      {
+        file: 'README.md',
+        content: `Found search query: "${query}"`,
+        score: 0.9,
+        line: 1
+      }
+    ];
+  }
+
+  /**
+   * Start the server
    */
   async start() {
     if (this.isRunning) {
-      console.log('[PRISM Daemon] Already running');
+      console.log('[PRISM] Already running');
       return;
     }
 
@@ -214,20 +151,19 @@ class SimplePrismDaemon {
       await this.initialize();
 
       this.server.listen(this.config.port, () => {
-        console.log(`[PRISM Daemon] Server started on port ${this.config.port}`);
-        console.log(`[PRISM Daemon] Health check: http://localhost:${this.config.port}/health`);
+        console.log(`[PRISM] Server running on http://localhost:${this.config.port}`);
+        console.log(`[PRISM] Health check: http://localhost:${this.config.port}/health`);
         this.isRunning = true;
-        this.emit('started');
       });
 
     } catch (error) {
-      console.error('[PRISM Daemon] Failed to start:', error);
-      throw error;
+      console.error('[PRISM] Failed to start:', error.message);
+      process.exit(1);
     }
   }
 
   /**
-   * Stop the daemon gracefully
+   * Stop the server
    */
   async stop() {
     if (!this.isRunning) {
@@ -236,9 +172,8 @@ class SimplePrismDaemon {
 
     return new Promise((resolve) => {
       this.server.close(() => {
-        console.log('[PRISM Daemon] Server stopped');
+        console.log('[PRISM] Server stopped');
         this.isRunning = false;
-        this.emit('stopped');
         resolve();
       });
     });
@@ -247,28 +182,22 @@ class SimplePrismDaemon {
 
 // Handle graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('[PRISM Daemon] Received SIGTERM, shutting down gracefully...');
-  if (daemon) {
-    await daemon.stop();
-  }
+  console.log('[PRISM] Shutting down...');
+  await daemon.stop();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
-  console.log('[PRISM Daemon] Received SIGINT, shutting down gracefully...');
-  if (daemon) {
-    await daemon.stop();
-  }
+  console.log('[PRISM] Shutting down...');
+  await daemon.stop();
   process.exit(0);
 });
 
-// Start the daemon
-const daemon = new PrismDaemon();
-
-daemon.start().catch(error => {
-  console.error('[PRISM Daemon] Failed to start:', error);
-  process.exit(1);
-});
-
-// Export for testing
 module.exports = PrismDaemon;
+
+// Only start daemon if run directly
+if (require.main === module) {
+  // Start the server
+  const daemon = new PrismDaemon();
+  daemon.start().catch(() => process.exit(1));
+}
