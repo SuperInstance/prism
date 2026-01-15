@@ -12,6 +12,10 @@ const WorkerFileProcessor = require('./worker-processor');
 const FuzzySearch = require('./fuzzy-search');
 const SearchCache = require('./search-cache');
 const PerformanceMonitor = require('./performance-monitor');
+const IndexCompressor = require('./index-compressor');
+const DeltaIndexManager = require('./delta-index-manager');
+const AutoCleanupManager = require('./cleanup-manager');
+const IndexFragmentAnalyzer = require('./fragment-analyzer');
 const { Worker } = require('worker_threads');
 const { performance } = require('perf_hooks');
 
@@ -53,6 +57,12 @@ class PrismDaemon {
     this.fuzzySearch = new FuzzySearch();
     this.searchCache = new SearchCache(this.config);
     this.performanceMonitor = new PerformanceMonitor(this.config);
+
+    // v0.6: Add compression and optimization components
+    this.indexCompressor = new IndexCompressor(this.config);
+    this.deltaIndexManager = new DeltaIndexManager(this.config);
+    this.cleanupManager = new AutoCleanupManager(this.config);
+    this.fragmentAnalyzer = new IndexFragmentAnalyzer(this.config);
   }
 
   /**
@@ -249,8 +259,6 @@ class PrismDaemon {
       this.handleSearch(req, res);
     } else if (method === 'POST' && url === '/index') {
       this.handleIndex(req, res);
-    } else if (method === 'GET' && url === '/health') {
-      this.sendHealthResponse(res);
     } else if (method === 'GET' && url === '/diagnostics') {
       this.sendDiagnosticsResponse(res);
     } else if (method === 'GET' && url === '/cache') {
@@ -259,6 +267,16 @@ class PrismDaemon {
       this.handleCacheClear(req, res);
     } else if (method === 'GET' && url === '/cache/stats') {
       this.sendCacheStatsResponse(res);
+    } else if (method === 'GET' && url === '/fragmentation') {
+      this.sendFragmentationResponse(res);
+    } else if (method === 'POST' && url === '/optimize') {
+      this.handleOptimize(req, res);
+    } else if (method === 'GET' && url === '/cleanup') {
+      this.sendCleanupResponse(res);
+    } else if (method === 'POST' && url === '/cleanup/force') {
+      this.handleForceCleanup(req, res);
+    } else if (method === 'GET' && url === '/delta/stats') {
+      this.sendDeltaStatsResponse(res);
     } else {
       res.writeHead(404);
       res.end(JSON.stringify({ error: 'Endpoint not found' }));
@@ -397,15 +415,49 @@ class PrismDaemon {
   async indexProject() {
     try {
       const files = await this.scanProjectFiles();
+      const startTime = performance.now();
+
+      // v0.6: Use delta indexing for incremental updates
+      const changes = await this.deltaIndexManager.computeDelta(files);
+
+      // Check if we should use delta indexing
+      const useDelta = this.deltaIndexManager.shouldUseDelta(changes);
+
+      if (useDelta) {
+        console.log(`[PRISM] Using delta indexing - ${changes.stats.changedFiles} changed files (${(changes.stats.changePercentage * 100).toFixed(1)}%)`);
+
+        // Apply delta to current index
+        if (this.indexedFiles) {
+          const deltaResult = await this.deltaIndexManager.applyDelta(changes, this.indexedFiles);
+          this.indexedFiles = deltaResult.newIndex;
+
+          // Track search access for cleanup
+          Object.keys(this.indexedFiles).forEach(filePath => {
+            this.cleanupManager.trackAccess(filePath);
+          });
+
+          const processingTime = performance.now() - startTime;
+          console.log(`[PRISM] Delta indexing completed in ${processingTime.toFixed(2)}ms`);
+
+          return {
+            filesCount: Object.keys(this.indexedFiles).length,
+            changedFiles: changes.stats.changedFiles,
+            skippedFiles: changes.unchanged.length,
+            cacheSize: this.fileMetadataCache.size,
+            processingTime,
+            isDelta: true,
+            changePercentage: changes.stats.changePercentage * 100
+          };
+        }
+      }
+
+      // Fall back to full indexing if no delta available or too many changes
+      console.log(`[PRISM] Using full indexing - ${files.length} files found, ${this.config.parallelWorkers} workers`);
+
       const indexedFiles = {};
       let filesCount = 0;
       let changedFiles = 0;
       let skippedFiles = 0;
-
-      // Check if we have existing metadata cache
-      const hasCache = this.fileMetadataCache.size > 0;
-
-      console.log(`[PRISM] Starting parallel indexing - ${files.length} files found, ${this.config.parallelWorkers} workers`);
 
       // Separate files into batches for parallel processing
       const workerBatches = this.createWorkerBatches(files);
@@ -450,13 +502,21 @@ class PrismDaemon {
       // Clean up metadata cache for files that no longer exist
       this.cleanupMetadataCache(files);
 
-      console.log(`[PRISM] Indexing completed - ${changedFiles} changed, ${skippedFiles} unchanged, ${filesCount} total`);
+      // Track search access for cleanup
+      Object.keys(this.indexedFiles).forEach(filePath => {
+        this.cleanupManager.trackAccess(filePath);
+      });
+
+      const processingTime = performance.now() - startTime;
+      console.log(`[PRISM] Full indexing completed - ${changedFiles} changed, ${skippedFiles} unchanged, ${filesCount} total in ${processingTime.toFixed(2)}ms`);
 
       return {
         filesCount: Object.keys(indexedFiles).length,
         changedFiles,
         skippedFiles,
-        cacheSize: this.fileMetadataCache.size
+        cacheSize: this.fileMetadataCache.size,
+        processingTime,
+        isDelta: false
       };
 
     } catch (error) {
@@ -1089,6 +1149,101 @@ class PrismDaemon {
   }
 
   /**
+   * Send fragmentation analysis response
+   */
+  sendFragmentationResponse(res) {
+    const fragmentation = this.fragmentAnalyzer.analyzeFragmentation(this.indexedFiles);
+    const healthReport = this.fragmentAnalyzer.getHealthReport(this.indexedFiles);
+    const trends = this.fragmentAnalyzer.getFragmentationTrends();
+
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      fragmented: fragmentation.fragmented,
+      analysis: fragmentation.analysis,
+      healthReport,
+      trends,
+      recommendations: fragmentation.analysis.recommendations
+    }, null, 2));
+  }
+
+  /**
+   * Handle index optimization request
+   */
+  handleOptimize(req, res) {
+    let data = '';
+    req.on('data', chunk => data += chunk);
+    req.on('end', async () => {
+      try {
+        const { strategy = 'auto' } = JSON.parse(data) || {};
+
+        const optimization = await this.optimizeIndex(strategy);
+
+        res.writeHead(200);
+        res.end(JSON.stringify({
+          message: 'Index optimization completed',
+          optimization,
+          timestamp: Date.now()
+        }, null, 2));
+      } catch (error) {
+        console.error('[PRISM] Optimization error:', error.message);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to optimize index' }));
+      }
+    });
+  }
+
+  /**
+   * Send cleanup statistics response
+   */
+  sendCleanupResponse(res) {
+    const cleanupStats = this.cleanupManager.getCleanupStats();
+    const memoryPressure = this.cleanupManager.getMemoryPressure();
+
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      cleanup: cleanupStats,
+      memory: memoryPressure,
+      timestamp: Date.now()
+    }, null, 2));
+  }
+
+  /**
+   * Handle force cleanup request
+   */
+  async handleForceCleanup(req, res) {
+    try {
+      const result = await this.cleanupManager.forceCleanup();
+
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        message: 'Force cleanup completed',
+        result,
+        timestamp: Date.now()
+      }, null, 2));
+    } catch (error) {
+      console.error('[PRISM] Force cleanup error:', error.message);
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: 'Failed to perform force cleanup' }));
+    }
+  }
+
+  /**
+   * Send delta statistics response
+   */
+  sendDeltaStatsResponse(res) {
+    const deltaStats = this.deltaIndexManager.getChangeStatistics();
+    const recommendations = this.deltaIndexManager.optimizeDeltaStrategy();
+
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      statistics: deltaStats,
+      recommendations,
+      history: this.deltaIndexManager.getChangeHistory(),
+      timestamp: Date.now()
+    }, null, 2));
+  }
+
+  /**
    * Enhanced search implementation with fuzzy matching
    */
   simpleSearch(query) {
@@ -1285,6 +1440,112 @@ class PrismDaemon {
         resolve();
       });
     });
+  }
+
+  /**
+   * Save compressed index to file
+   */
+  async saveIndex(filePath) {
+    if (!this.indexedFiles || Object.keys(this.indexedFiles).length === 0) {
+      throw new Error('No index data to save');
+    }
+
+    try {
+      console.log(`[PRISM] Saving compressed index with ${Object.keys(this.indexedFiles).length} files`);
+
+      // Apply compression before saving
+      const compressionResult = await this.indexCompressor.saveToFile(filePath, this.indexedFiles);
+
+      console.log(`[PRISM] Index saved with ${((1 - compressionResult.compressionRatio) * 100).toFixed(1)}% compression`);
+
+      return {
+        success: true,
+        originalSize: compressionResult.originalSize,
+        compressedSize: compressionResult.compressedSize,
+        compressionRatio: compressionResult.compressionRatio,
+        fileCount: Object.keys(this.indexedFiles).length
+      };
+    } catch (error) {
+      console.error('[PRISM] Failed to save index:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Load compressed index from file
+   */
+  async loadIndex(filePath) {
+    try {
+      console.log(`[PRISM] Loading index from ${filePath}`);
+
+      // Load and decompress the index
+      const loadResult = await this.indexCompressor.loadFromFile(filePath);
+
+      this.indexedFiles = loadResult.data;
+      this.lastIndexTime = Date.now();
+
+      // Track access for cleanup
+      Object.keys(this.indexedFiles).forEach(filePath => {
+        this.cleanupManager.trackAccess(filePath);
+      });
+
+      console.log(`[PRISM] Index loaded with ${Object.keys(this.indexedFiles).length} files`);
+
+      return {
+        success: true,
+        fileCount: Object.keys(this.indexedFiles).length,
+        metadata: loadResult.metadata
+      };
+    } catch (error) {
+      console.error('[PRISM] Failed to load index:', error.message);
+      // Initialize with empty index
+      this.indexedFiles = {};
+      return {
+        success: false,
+        error: error.message,
+        fileCount: 0
+      };
+    }
+  }
+
+  /**
+   * Get index fragmentation analysis
+   */
+  async analyzeIndexFragmentation() {
+    if (!this.indexedFiles) {
+      return {
+        fragmented: false,
+        analysis: {
+          reason: 'No index data available'
+        }
+      };
+    }
+
+    const analysis = this.fragmentAnalyzer.analyzeFragmentation(this.indexedFiles);
+    const healthReport = this.fragmentAnalyzer.getHealthReport(this.indexedFiles);
+
+    return {
+      fragmented: analysis.fragmented,
+      analysis: analysis.analysis,
+      healthReport
+    };
+  }
+
+  /**
+   * Optimize index based on fragmentation analysis
+   */
+  async optimizeIndex(strategy = 'auto') {
+    if (!this.indexedFiles) {
+      throw new Error('No index data to optimize');
+    }
+
+    console.log(`[PRISM] Starting index optimization with strategy: ${strategy}`);
+
+    const optimization = await this.fragmentAnalyzer.optimizeIndex(this.indexedFiles, strategy);
+
+    console.log(`[PRISM] Index optimization completed in ${optimization.results.timeTaken.toFixed(2)}ms`);
+
+    return optimization;
   }
 }
 
