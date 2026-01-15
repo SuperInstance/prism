@@ -220,4 +220,4 @@ We welcome contributions! Please keep the focus on simplicity and stability.
 
 **PRISM Local JSON** - Making Claude Code better, simply and reliably. 🚀
 
-> For projects that need enhanced capabilities without complexity.# Cache bust Wed Jan 14 18:41:06 AKST 2026
+> For projects that need enhanced capabilities without complexity.
