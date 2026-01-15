@@ -10,6 +10,7 @@ const path = require('path');
 const http = require('http');
 const WorkerFileProcessor = require('./worker-processor');
 const FuzzySearch = require('./fuzzy-search');
+const SearchCache = require('./search-cache');
 const PerformanceMonitor = require('./performance-monitor');
 const { Worker } = require('worker_threads');
 const { performance } = require('perf_hooks');
@@ -50,6 +51,7 @@ class PrismDaemon {
     this.maxCacheSize = this.adaptiveConfig.cacheSize;
     this.currentMemoryUsage = 0;
     this.fuzzySearch = new FuzzySearch();
+    this.searchCache = new SearchCache(this.config);
     this.performanceMonitor = new PerformanceMonitor(this.config);
   }
 
@@ -251,6 +253,12 @@ class PrismDaemon {
       this.sendHealthResponse(res);
     } else if (method === 'GET' && url === '/diagnostics') {
       this.sendDiagnosticsResponse(res);
+    } else if (method === 'GET' && url === '/cache') {
+      this.sendCacheResponse(res);
+    } else if (method === 'POST' && url === '/cache/clear') {
+      this.handleCacheClear(req, res);
+    } else if (method === 'GET' && url === '/cache/stats') {
+      this.sendCacheStatsResponse(res);
     } else {
       res.writeHead(404);
       res.end(JSON.stringify({ error: 'Endpoint not found' }));
@@ -293,15 +301,15 @@ class PrismDaemon {
           return;
         }
 
-        // Check cache first
-        const cacheKey = query.toLowerCase();
-        if (this.searchCache.has(cacheKey)) {
-          const cachedResult = this.searchCache.get(cacheKey);
+        // Check enhanced cache first
+        const cacheResult = this.searchCache.get(query);
+        if (cacheResult) {
           res.writeHead(200);
           res.end(JSON.stringify({
-            results: cachedResult.results,
+            results: cacheResult.result,
             cached: true,
-            timestamp: cachedResult.timestamp
+            cacheHit: true,
+            timestamp: cacheResult.timestamp
           }));
           return;
         }
@@ -316,18 +324,14 @@ class PrismDaemon {
           query,
           searchDuration,
           results.length,
-          this.searchCache.has(cacheKey)
+          true // This is a cache miss, but we'll cache the result below
         );
 
-        // Cache the result (LRU eviction)
-        if (this.searchCache.size >= this.maxCacheSize) {
-          const firstKey = this.searchCache.keys().next().value;
-          this.searchCache.delete(firstKey);
-        }
-
-        this.searchCache.set(cacheKey, {
-          results,
-          timestamp: Date.now()
+        // Cache the result with intelligent optimization
+        this.searchCache.set(query, results, {
+          ttl: this.config.cacheTTL,
+          priority: 'normal',
+          maxSize: this.maxCacheSize
         });
 
         res.writeHead(200);
@@ -342,7 +346,7 @@ class PrismDaemon {
   }
 
   /**
-   * Handle index request
+   * Handle index request with progress indicators
    */
   async handleIndex(req, res) {
     try {
@@ -352,28 +356,38 @@ class PrismDaemon {
         res.writeHead(200);
         res.end(JSON.stringify({
           message: 'Already indexed recently',
-          files: Object.keys(this.indexedFiles).length
+          files: Object.keys(this.indexedFiles).length,
+          cached: true
         }));
         return;
       }
 
-      // Perform indexing
+      // Perform indexing with progress tracking
       const startTime = performance.now();
-      const result = await this.indexProject();
+      const progressCallback = (progress) => {
+        // Send progress updates via WebSocket-like mechanism (for future enhancement)
+        console.log(`[PRISM Indexing Progress] ${progress.percentage}% - ${progress.current}/${progress.total} files`);
+      };
+
+      const result = await this.indexProjectWithProgress(progressCallback);
       const duration = performance.now() - startTime;
 
       res.writeHead(200);
       res.end(JSON.stringify({
         message: 'Indexing completed',
         filesIndexed: result.filesCount,
-        duration: `${duration}ms`,
-        lastIndexed: new Date().toISOString()
+        changedFiles: result.changedFiles,
+        skippedFiles: result.skippedFiles,
+        duration: `${duration.toFixed(2)}ms`,
+        throughput: `${(result.filesCount / (duration / 1000)).toFixed(1)} files/sec`,
+        lastIndexed: new Date().toISOString(),
+        cacheSize: this.fileMetadataCache.size
       }));
 
     } catch (error) {
       console.error('[PRISM] Index error:', error.message);
       res.writeHead(500);
-      res.end(JSON.stringify({ error: 'Indexing failed' }));
+      res.end(JSON.stringify({ error: 'Indexing failed', details: error.message }));
     }
   }
 
@@ -448,6 +462,104 @@ class PrismDaemon {
     } catch (error) {
       console.error('[PRISM] Indexing failed:', error.message);
       throw error;
+    }
+  }
+
+  /**
+   * Index project files with progress tracking
+   */
+  async indexProjectWithProgress(progressCallback) {
+    const files = await this.scanProjectFiles();
+    const indexedFiles = {};
+    let filesCount = 0;
+    let changedFiles = 0;
+    let skippedFiles = 0;
+
+    console.log(`[PRISM] Starting parallel indexing with progress - ${files.length} files found, ${this.config.parallelWorkers} workers`);
+
+    // Report initial progress
+    this.reportProgress(progressCallback, 0, files.length, 'Scanning files...');
+
+    // Separate files into batches for parallel processing
+    const workerBatches = this.createWorkerBatches(files);
+    const processor = new WorkerFileProcessor(this.config);
+
+    // Process batches with progress tracking
+    const totalBatches = workerBatches.length;
+    let completedBatches = 0;
+
+    for (const batch of workerBatches) {
+      if (batch.length === 0) continue;
+
+      const batchResults = await this.processFileBatch(batch, processor);
+
+      // Process results
+      for (const result of batchResults) {
+        if (result.fileData) {
+          indexedFiles[result.filePath] = result.fileData;
+          this.fileMetadataCache.set(result.filePath, this.getMetadataKey(result.filePath));
+          filesCount++;
+          changedFiles++;
+        } else if (result.skipped) {
+          // Keep existing data
+          if (this.indexedFiles?.[result.filePath]) {
+            indexedFiles[result.filePath] = this.indexedFiles[result.filePath];
+            this.fileMetadataCache.set(result.filePath, this.getMetadataKey(result.filePath));
+          }
+          skippedFiles++;
+        }
+      }
+
+      completedBatches++;
+      const overallProgress = Math.round((completedBatches / totalBatches) * 100);
+      const fileProgress = Math.round((filesCount / files.length) * 100);
+
+      // Report progress
+      this.reportProgress(progressCallback, fileProgress, files.length,
+        `Processing batch ${completedBatches}/${totalBatches} (${filesCount} files processed)`);
+
+      // Respect max files limit
+      if (filesCount >= this.config.maxFiles) {
+        console.log(`[PRISM] Reached max files limit (${this.config.maxFiles})`);
+        break;
+      }
+
+      // Reset memory between batches
+      processor.resetMemory();
+    }
+
+    this.indexedFiles = indexedFiles;
+    this.lastIndexTime = Date.now();
+
+    // Clean up metadata cache for files that no longer exist
+    this.cleanupMetadataCache(files);
+
+    // Report completion
+    this.reportProgress(progressCallback, 100, files.length,
+      `Indexing completed - ${changedFiles} changed, ${skippedFiles} unchanged, ${filesCount} total`);
+
+    console.log(`[PRISM] Indexing completed - ${changedFiles} changed, ${skippedFiles} unchanged, ${filesCount} total`);
+
+    return {
+      filesCount: Object.keys(indexedFiles).length,
+      changedFiles,
+      skippedFiles,
+      cacheSize: this.fileMetadataCache.size
+    };
+  }
+
+  /**
+   * Report progress to callback
+   */
+  reportProgress(progressCallback, percentage, current, message) {
+    if (progressCallback) {
+      progressCallback({
+        percentage: Math.min(percentage, 100),
+        current,
+        total: current + (100 - percentage), // Estimated total
+        message,
+        timestamp: Date.now()
+      });
     }
   }
 
@@ -903,6 +1015,60 @@ class PrismDaemon {
 
     res.writeHead(200);
     res.end(JSON.stringify(diagnostics, null, 2));
+  }
+
+  /**
+   * Send cache response
+   */
+  sendCacheResponse(res) {
+    const cacheInfo = {
+      status: this.searchCache.getHealthStatus(),
+      stats: this.searchCache.getStats(),
+      insights: this.searchCache.getInsights(),
+      size: this.searchCache.cache.size
+    };
+
+    res.writeHead(200);
+    res.end(JSON.stringify(cacheInfo, null, 2));
+  }
+
+  /**
+   * Handle cache clear request
+   */
+  handleCacheClear(req, res) {
+    let data = '';
+    req.on('data', chunk => data += chunk);
+    req.on('end', () => {
+      try {
+        const options = JSON.parse(data) || {};
+        this.searchCache.clear(options);
+
+        res.writeHead(200);
+        res.end(JSON.stringify({
+          message: 'Cache cleared successfully',
+          remainingEntries: this.searchCache.cache.size,
+          timestamp: Date.now()
+        }));
+      } catch (error) {
+        console.error('[PRISM] Cache clear error:', error.message);
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to clear cache' }));
+      }
+    });
+  }
+
+  /**
+   * Send cache statistics response
+   */
+  sendCacheStatsResponse(res) {
+    const stats = {
+      search: this.searchCache.getStats(),
+      performance: this.performanceMonitor.getReport(),
+      insights: this.searchCache.getInsights()
+    };
+
+    res.writeHead(200);
+    res.end(JSON.stringify(stats, null, 2));
   }
 
   /**

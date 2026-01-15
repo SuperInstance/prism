@@ -34,10 +34,12 @@ class WorkerFileProcessor {
         return null;
       }
 
-      // Read file content
+      // Read file content with streaming for large files
       let content;
-      if (fileSize > 1024 * 1024) { // 1MB+
+      if (fileSize > 10 * 1024 * 1024) { // 10MB+
         content = await this.streamReadFile(filePath, fileSize);
+      } else if (fileSize > 1024 * 1024) { // 1MB-10MB
+        content = await fsPromises.readFile(filePath, 'utf8');
       } else {
         content = await fsPromises.readFile(filePath, 'utf8');
       }

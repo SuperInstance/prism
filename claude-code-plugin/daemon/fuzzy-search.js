@@ -34,13 +34,15 @@ class FuzzySearch {
   }
 
   /**
-   * Perform fuzzy search with multiple algorithms
+   * Perform advanced fuzzy search with multiple algorithms
    */
   fuzzySearch(query, text, threshold = 0.6) {
     const results = [];
+    const queryLower = query.toLowerCase();
+    const textLower = text.toLowerCase();
 
     // 1. Levenshtein distance
-    const levenshteinScore = this.levenshteinSimilarity(query.toLowerCase(), text.toLowerCase());
+    const levenshteinScore = this.levenshteinSimilarity(queryLower, textLower);
     if (levenshteinScore >= threshold) {
       results.push({
         type: 'levenshtein',
@@ -50,7 +52,7 @@ class FuzzySearch {
     }
 
     // 2. Jaro-Winkler similarity
-    const jaroScore = this.jaroWinklerSimilarity(query.toLowerCase(), text.toLowerCase());
+    const jaroScore = this.jaroWinklerSimilarity(queryLower, textLower);
     if (jaroScore >= threshold) {
       results.push({
         type: 'jaro-winkler',
@@ -70,11 +72,31 @@ class FuzzySearch {
     }
 
     // 4. N-gram similarity
-    const ngramScore = this.ngramSimilarity(query.toLowerCase(), text.toLowerCase(), 2);
+    const ngramScore = this.ngramSimilarity(queryLower, textLower, 2);
     if (ngramScore >= threshold) {
       results.push({
         type: 'ngram',
         score: ngramScore,
+        text: this.getBestSnippet(query, text)
+      });
+    }
+
+    // 5. Prefix matching (for autocompletion-like queries)
+    const prefixScore = this.prefixSimilarity(queryLower, textLower);
+    if (prefixScore >= threshold) {
+      results.push({
+        type: 'prefix',
+        score: prefixScore,
+        text: this.getBestSnippet(query, text)
+      });
+    }
+
+    // 6. Suffix matching (for ending patterns)
+    const suffixScore = this.suffixSimilarity(queryLower, textLower);
+    if (suffixScore >= threshold) {
+      results.push({
+        type: 'suffix',
+        score: suffixScore,
         text: this.getBestSnippet(query, text)
       });
     }
@@ -84,7 +106,7 @@ class FuzzySearch {
   }
 
   /**
-   * Extract words with stemming support
+   * Extract words with stemming support and multi-word optimization
    */
   extractSearchTerms(text, query) {
     const words = text.toLowerCase().split(/\s+/);
@@ -105,7 +127,89 @@ class FuzzySearch {
       variations.forEach(variation => terms.add(variation));
     });
 
+    // Multi-word query optimization
+    if (queryWords.length > 1) {
+      // Add phrase variations
+      const phraseVariations = this.generatePhraseVariations(queryWords);
+      phraseVariations.forEach(variation => terms.add(variation.toLowerCase()));
+    }
+
     return Array.from(terms);
+  }
+
+  /**
+   * Generate phrase variations for multi-word queries
+   */
+  generatePhraseVariations(queryWords) {
+    const variations = [];
+    const length = queryWords.length;
+
+    // Add original phrase
+    variations.push(queryWords.join(' '));
+
+    // Add phrase without last word (prefix phrase)
+    if (length > 1) {
+      variations.push(queryWords.slice(0, -1).join(' '));
+    }
+
+    // Add phrase without first word (suffix phrase)
+    if (length > 1) {
+      variations.push(queryWords.slice(1).join(' '));
+    }
+
+    // Add individual words with context
+    queryWords.forEach((word, index) => {
+      // Add word with preceding context
+      if (index > 0) {
+        variations.push(queryWords[index - 1] + ' ' + word);
+      }
+      // Add word with following context
+      if (index < length - 1) {
+        variations.push(word + ' ' + queryWords[index + 1]);
+      }
+    });
+
+    // Add common programming patterns
+    if (this.isCodePattern(queryWords.join(' '))) {
+      variations.push(this.normalizeCodePattern(queryWords.join(' ')));
+    }
+
+    return [...new Set(variations)];
+  }
+
+  /**
+   * Check if text matches common code patterns
+   */
+  isCodePattern(text) {
+    const patterns = [
+      /\.js$/, /\.ts$/, /\.jsx$/, /\.tsx$/,
+      /function\s+\w+/, /class\s+\w+/, /import\s+/,
+      /require\s*\(/, /export\s+/, /const\s+\w+/,
+      /let\s+\w+/, /var\s+\w+/, /\.map\b/, /\.reduce\b/,
+      /\.filter\b/, /\.find\b/, /\.forEach\b/
+    ];
+
+    return patterns.some(pattern => pattern.test(text));
+  }
+
+  /**
+   * Normalize code patterns for better matching
+   */
+  normalizeCodePattern(pattern) {
+    // Convert common code patterns to searchable forms
+    const normalized = pattern
+      .replace(/\./g, ' ') // Convert dots to spaces
+      .replace(/function\s+/g, 'function ')
+      .replace(/class\s+/g, 'class ')
+      .replace(/import\s+/g, 'import ')
+      .replace(/export\s+/g, 'export ')
+      .replace(/const\s+/g, 'const ')
+      .replace(/let\s+/g, 'let ')
+      .replace(/var\s+/g, 'var ')
+      .replace(/\s+/g, ' ') // Normalize spaces
+      .trim();
+
+    return normalized;
   }
 
   /**
@@ -319,6 +423,64 @@ class FuzzySearch {
   }
 
   /**
+   * Prefix similarity (for autocompletion-like queries)
+   */
+  prefixSimilarity(query, text) {
+    if (query.length === 0) return 0.0;
+
+    let matchingLength = 0;
+    const minLength = Math.min(query.length, text.length);
+
+    for (let i = 0; i < minLength; i++) {
+      if (query[i] === text[i]) {
+        matchingLength++;
+      } else {
+        break;
+      }
+    }
+
+    // Score based on how much of the query matches the prefix
+    const prefixScore = matchingLength / query.length;
+
+    // Bonus for exact prefix match
+    if (matchingLength === query.length) {
+      return Math.min(prefixScore + 0.3, 1.0);
+    }
+
+    return prefixScore;
+  }
+
+  /**
+   * Suffix similarity (for ending patterns)
+   */
+  suffixSimilarity(query, text) {
+    if (query.length === 0) return 0.0;
+
+    let matchingLength = 0;
+    const queryEnd = query.length - 1;
+    const textEnd = text.length - 1;
+    const minLength = Math.min(query.length, text.length);
+
+    for (let i = 0; i < minLength; i++) {
+      if (query[queryEnd - i] === text[textEnd - i]) {
+        matchingLength++;
+      } else {
+        break;
+      }
+    }
+
+    // Score based on how much of the query matches the suffix
+    const suffixScore = matchingLength / query.length;
+
+    // Bonus for exact suffix match
+    if (matchingLength === query.length) {
+      return Math.min(suffixScore + 0.3, 1.0);
+    }
+
+    return suffixScore;
+  }
+
+  /**
    * Extract n-grams from text
    */
   getNGrams(text, n) {
@@ -349,22 +511,25 @@ class FuzzySearch {
   }
 
   /**
-   * Advanced search with fuzzy matching
+   * Advanced search with context-aware ranking and fuzzy matching
    */
   advancedSearch(query, indexedFiles, options = {}) {
     const {
       threshold = 0.3,
       maxResults = 10,
       fuzzy = true,
-      stem = true
+      stem = true,
+      contextAware = true
     } = options;
 
     const results = [];
     const queryTerms = this.extractSearchTerms(query, query);
+    const isCodeSearch = this.isCodeRelatedQuery(query);
 
     for (const [filePath, fileData] of Object.entries(indexedFiles)) {
       let totalScore = 0;
       let bestSnippet = '';
+      let contextScore = 0;
 
       // Standard matching
       const standardScore = this.standardMatch(query, filePath, fileData.content, queryTerms);
@@ -379,12 +544,22 @@ class FuzzySearch {
         }
       }
 
+      // Context-aware scoring if enabled
+      if (contextAware) {
+        contextScore = this.calculateContextScore(query, filePath, fileData.content, queryTerms, isCodeSearch);
+        totalScore += contextScore;
+      }
+
       if (totalScore > threshold) {
         results.push({
           file: filePath,
           content: bestSnippet || this.getBestSnippet(query, fileData.content),
           score: Math.min(totalScore, 1.0),
-          line: this.findMatchLine(fileData.content, queryTerms)
+          line: this.findMatchLine(fileData.content, queryTerms),
+          context: contextScore > 0 ? {
+            type: isCodeSearch ? 'code' : 'general',
+            relevance: contextScore
+          } : null
         });
       }
     }
@@ -392,6 +567,190 @@ class FuzzySearch {
     return results
       .sort((a, b) => b.score - a.score)
       .slice(0, maxResults);
+  }
+
+  /**
+   * Check if query is code-related
+   */
+  isCodeRelatedQuery(query) {
+    const codeKeywords = [
+      'function', 'class', 'method', 'variable', 'parameter', 'argument',
+      'import', 'export', 'require', 'module', 'component', 'service',
+      'hook', 'state', 'props', 'const', 'let', 'var', 'type', 'interface',
+      'extends', 'implements', 'constructor', 'destructor', 'async', 'await',
+      'promise', 'callback', 'event', 'handler', 'api', 'endpoint'
+    ];
+
+    const queryLower = query.toLowerCase();
+    return codeKeywords.some(keyword => queryLower.includes(keyword));
+  }
+
+  /**
+   * Calculate context-aware score
+   */
+  calculateContextScore(query, filePath, content, queryTerms, isCodeSearch) {
+    let contextScore = 0;
+
+    // File path context
+    contextScore += this.scoreFileContext(filePath, queryTerms, isCodeSearch);
+
+    // Content context
+    if (content) {
+      contextScore += this.scoreContentContext(content, queryTerms, isCodeSearch);
+    }
+
+    // Project structure context
+    contextScore += this.scoreProjectStructureContext(filePath, isCodeSearch);
+
+    // Query type context
+    if (isCodeSearch) {
+      contextScore += this.scoreCodeContext(query, content);
+    }
+
+    return Math.min(contextScore, 0.3); // Cap context scoring at 0.3
+  }
+
+  /**
+   * Score file path context
+   */
+  scoreFileContext(filePath, queryTerms, isCodeSearch) {
+    let score = 0;
+    const lowerPath = filePath.toLowerCase();
+
+    // Prefer source files for code searches
+    if (isCodeSearch) {
+      if (lowerPath.includes('/src/') || lowerPath.includes('/lib/') || lowerPath.includes('/app/')) {
+        score += 0.1;
+      }
+
+      // Prefer specific code directories
+      const codeDirs = ['/components/', '/utils/', '/services/', '/hooks/', '/types/'];
+      if (codeDirs.some(dir => lowerPath.includes(dir))) {
+        score += 0.05;
+      }
+    }
+
+    // Penalize test files unless query includes "test"
+    if (!queryTerms.some(term => term.includes('test')) &&
+        (lowerPath.includes('/test/') || lowerPath.includes('/tests/') || lowerPath.includes('__test__'))) {
+      score -= 0.05;
+    }
+
+    // Documentation preference for help queries
+    if (queryTerms.some(term => ['help', 'docs', 'documentation', 'guide'].includes(term))) {
+      if (lowerPath.includes('/docs/') || filePath.endsWith('.md') || filePath.includes('/README')) {
+        score += 0.1;
+      }
+    }
+
+    return Math.max(0, score);
+  }
+
+  /**
+   * Score content context
+   */
+  scoreContentContext(content, queryTerms, isCodeSearch) {
+    let score = 0;
+    const contentLower = content.toLowerCase();
+
+    // Code pattern matching for code searches
+    if (isCodeSearch) {
+      const codePatterns = [
+        /\bfunction\s+\w+\s*\(/gi,
+        /\bclass\s+\w+/gi,
+        /\bimport\s+.*from/gi,
+        /\bexport\s+(default|const|let|var|function)/gi,
+        /\bconst\s+\w+\s*=/gi,
+        /\blet\s+\w+\s*=/gi,
+        /\bvar\s+\w+\s*=/gi
+      ];
+
+      let patternMatches = 0;
+      codePatterns.forEach(pattern => {
+        const matches = contentLower.match(pattern);
+        if (matches) patternMatches += matches.length;
+      });
+
+      // Bonus for code patterns in the file
+      if (patternMatches > 0) {
+        score += Math.min(patternMatches * 0.02, 0.1);
+      }
+    }
+
+    // Query term frequency in content
+    queryTerms.forEach(term => {
+      const termCount = (contentLower.match(new RegExp(term, 'g')) || []).length;
+      if (termCount > 0) {
+        score += Math.min(termCount * 0.01, 0.05);
+      }
+    });
+
+    return Math.max(0, score);
+  }
+
+  /**
+   * Score project structure context
+   */
+  scoreProjectStructureContext(filePath, isCodeSearch) {
+    let score = 0;
+    const pathParts = filePath.split(path.sep);
+    const depth = pathParts.length;
+
+    // Prefer files closer to project root (depth 2-4)
+    if (depth >= 2 && depth <= 4) {
+      score += 0.05;
+    }
+
+    // Penalize very deep paths
+    if (depth > 6) {
+      score -= 0.05;
+    }
+
+    // Bonus for common project structure patterns
+    const fileName = path.basename(filePath).toLowerCase();
+    if (fileName.includes('index') || fileName.includes('main') || fileName.includes('app')) {
+      score += 0.03;
+    }
+
+    return Math.max(0, score);
+  }
+
+  /**
+   * Score code context based on query type
+   */
+  scoreCodeContext(query, content) {
+    let score = 0;
+    const queryLower = query.toLowerCase();
+
+    // React-specific patterns
+    if (queryLower.includes('hook')) {
+      if (content.includes('useEffect') || content.includes('useState') || content.includes('useContext')) {
+        score += 0.1;
+      }
+    }
+
+    // TypeScript patterns
+    if (queryLower.includes('type') || queryLower.includes('interface')) {
+      if (content.includes(':') && content.includes(';') && content.includes('interface')) {
+        score += 0.08;
+      }
+    }
+
+    // JavaScript patterns
+    if (queryLower.includes('function') || queryLower.includes('method')) {
+      if (content.includes('function') || content.includes('=>') || content.includes('async')) {
+        score += 0.06;
+      }
+    }
+
+    // Module patterns
+    if (queryLower.includes('import') || queryLower.includes('export')) {
+      if (content.includes('import') || content.includes('require') || content.includes('module.exports')) {
+        score += 0.07;
+      }
+    }
+
+    return Math.max(0, score);
   }
 
   /**
