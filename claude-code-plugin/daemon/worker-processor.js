@@ -5,7 +5,8 @@
  * Handles parallel file processing for faster indexing
  */
 
-const fs = require('fs').promises;
+const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 
 class WorkerFileProcessor {
@@ -38,7 +39,7 @@ class WorkerFileProcessor {
       if (fileSize > 1024 * 1024) { // 1MB+
         content = await this.streamReadFile(filePath, fileSize);
       } else {
-        content = await fs.readFile(filePath, 'utf8');
+        content = await fsPromises.readFile(filePath, 'utf8');
       }
 
       // Update memory usage
