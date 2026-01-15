@@ -8,12 +8,24 @@
 const fs = require('fs').promises;
 const path = require('path');
 const http = require('http');
-const SimpleProjectDetector = require('./simple-project-detector');
+const WorkerFileProcessor = require('./worker-processor');
+const FuzzySearch = require('./fuzzy-search');
+const PerformanceMonitor = require('./performance-monitor');
+const { Worker } = require('worker_threads');
+const { performance } = require('perf_hooks');
 
 class PrismDaemon {
   constructor() {
     this.projectRoot = process.env.PROJECT_ROOT || process.cwd();
-    this.adaptiveConfig = this.calculateAdaptiveConfig(this.projectRoot);
+
+    // Initialize with default config, will be updated after project size estimation
+    this.adaptiveConfig = {
+      maxFiles: 1000,
+      maxFileSize: 1024 * 1024,
+      parallelWorkers: 1,
+      memoryLimit: 100 * 1024 * 1024,
+      cacheSize: 50
+    };
 
     this.config = {
       port: parseInt(process.env.PORT) || 8080,
@@ -24,7 +36,8 @@ class PrismDaemon {
       incrementalIndexing: true, // Enable incremental indexing
       cacheTTL: 60000, // Cache metadata for 60 seconds
       parallelWorkers: this.adaptiveConfig.parallelWorkers,
-      memoryLimit: this.adaptiveConfig.memoryLimit
+      memoryLimit: this.adaptiveConfig.memoryLimit,
+      useWorkers: this.adaptiveConfig.parallelWorkers > 1
     };
 
     this.server = http.createServer(this.handleRequest.bind(this));
@@ -36,22 +49,28 @@ class PrismDaemon {
     this.searchCache = new Map(); // Simple LRU cache for search results
     this.maxCacheSize = this.adaptiveConfig.cacheSize;
     this.currentMemoryUsage = 0;
+    this.fuzzySearch = new FuzzySearch();
+    this.performanceMonitor = new PerformanceMonitor(this.config);
   }
 
   /**
    * Calculate adaptive configuration based on project size
    */
-  calculateAdaptiveConfig(projectRoot) {
+  calculateAdaptiveConfig(projectSize) {
+    const cpuCount = require('os').cpus().length;
     const baseConfig = {
       maxFiles: 1000,
       maxFileSize: 1024 * 1024, // 1MB
       parallelWorkers: 1,
       memoryLimit: 100 * 1024 * 1024, // 100MB
-      cacheSize: 50
+      cacheSize: 50,
+      // Large monorepo optimizations
+      monorepoOptimization: false,
+      prioritizeSrcFiles: true,
+      largeFileThreshold: 1024 * 1024, // 1MB
+      batchSize: 50
     };
 
-    // Try to estimate project size
-    const projectSize = this.estimateProjectSize(projectRoot);
     console.log(`[PRISM] Estimated project size: ${projectSize} files`);
 
     // Adjust configuration based on project size
@@ -60,7 +79,8 @@ class PrismDaemon {
       return {
         ...baseConfig,
         maxFiles: 1000,
-        cacheSize: 20
+        cacheSize: 20,
+        parallelWorkers: 1
       };
     } else if (projectSize < 1000) {
       // Medium project
@@ -68,9 +88,10 @@ class PrismDaemon {
         ...baseConfig,
         maxFiles: 5000,
         maxFileSize: 2 * 1024 * 1024, // 2MB
-        parallelWorkers: Math.min(2, require('os').cpus().length),
+        parallelWorkers: Math.min(2, cpuCount),
         memoryLimit: 200 * 1024 * 1024, // 200MB
-        cacheSize: 100
+        cacheSize: 100,
+        batchSize: 25
       };
     } else if (projectSize < 10000) {
       // Large project
@@ -78,19 +99,39 @@ class PrismDaemon {
         ...baseConfig,
         maxFiles: 10000,
         maxFileSize: 5 * 1024 * 1024, // 5MB
-        parallelWorkers: Math.min(4, require('os').cpus().length),
+        parallelWorkers: Math.min(4, cpuCount),
         memoryLimit: 500 * 1024 * 1024, // 500MB
-        cacheSize: 200
+        cacheSize: 200,
+        batchSize: 20,
+        prioritizeSrcFiles: true
       };
-    } else {
-      // Very large project
+    } else if (projectSize < 50000) {
+      // Very large project (monorepo scale)
       return {
         ...baseConfig,
-        maxFiles: 20000,
-        maxFileSize: 10 * 1024 * 1024, // 10MB
-        parallelWorkers: Math.min(8, require('os').cpus().length),
+        maxFiles: 30000,
+        maxFileSize: 8 * 1024 * 1024, // 8MB
+        parallelWorkers: Math.min(cpuCount, 8),
         memoryLimit: 1024 * 1024 * 1024, // 1GB
-        cacheSize: 500
+        cacheSize: 500,
+        batchSize: 15,
+        monorepoOptimization: true,
+        prioritizeSrcFiles: true,
+        largeFileThreshold: 2 * 1024 * 1024 // 2MB
+      };
+    } else {
+      // Huge project (>50K files)
+      return {
+        ...baseConfig,
+        maxFiles: 50000,
+        maxFileSize: 15 * 1024 * 1024, // 15MB
+        parallelWorkers: Math.min(cpuCount, 12),
+        memoryLimit: 2048 * 1024 * 1024, // 2GB
+        cacheSize: 1000,
+        batchSize: 10,
+        monorepoOptimization: true,
+        prioritizeSrcFiles: true,
+        largeFileThreshold: 5 * 1024 * 1024 // 5MB
       };
     }
   }
@@ -139,8 +180,22 @@ class PrismDaemon {
    */
   async initialize() {
     try {
+      // Discover project and estimate size
       await this.discoverProject();
+
+      // Set adaptive configuration based on project size
+      const projectSize = await this.estimateProjectSize(this.projectRoot);
+      this.adaptiveConfig = this.calculateAdaptiveConfig(projectSize);
+
+      // Update config with adaptive values
+      this.config.maxFiles = this.adaptiveConfig.maxFiles;
+      this.config.maxFileSize = this.adaptiveConfig.maxFileSize;
+      this.config.parallelWorkers = this.adaptiveConfig.parallelWorkers;
+      this.config.memoryLimit = this.adaptiveConfig.memoryLimit;
+      this.maxCacheSize = this.adaptiveConfig.cacheSize;
+
       console.log(`[PRISM] Project: ${this.projectInfo?.name || 'Unknown'} (${this.projectInfo?.language || 'unknown'})`);
+      console.log(`[PRISM] Adaptive config: ${projectSize} files, max ${this.config.maxFiles} files, ${this.config.maxFileSize / 1024 / 1024}MB max file size`);
     } catch (error) {
       console.error('[PRISM] Initialization failed:', error.message);
       throw error;
@@ -186,10 +241,16 @@ class PrismDaemon {
       this.sendProjectResponse(res);
     } else if (method === 'GET' && url === '/stats') {
       this.sendStatsResponse(res);
+    } else if (method === 'GET' && url === '/performance') {
+      this.sendPerformanceResponse(res);
     } else if (method === 'POST' && url === '/search') {
       this.handleSearch(req, res);
     } else if (method === 'POST' && url === '/index') {
       this.handleIndex(req, res);
+    } else if (method === 'GET' && url === '/health') {
+      this.sendHealthResponse(res);
+    } else if (method === 'GET' && url === '/diagnostics') {
+      this.sendDiagnosticsResponse(res);
     } else {
       res.writeHead(404);
       res.end(JSON.stringify({ error: 'Endpoint not found' }));
@@ -246,7 +307,17 @@ class PrismDaemon {
         }
 
         // Perform search
+        const searchStart = performance.now();
         const results = this.simpleSearch(query);
+        const searchDuration = performance.now() - searchStart;
+
+        // Record search metrics
+        this.performanceMonitor.recordSearch(
+          query,
+          searchDuration,
+          results.length,
+          this.searchCache.has(cacheKey)
+        );
 
         // Cache the result (LRU eviction)
         if (this.searchCache.size >= this.maxCacheSize) {
@@ -287,9 +358,9 @@ class PrismDaemon {
       }
 
       // Perform indexing
-      const startTime = Date.now();
+      const startTime = performance.now();
       const result = await this.indexProject();
-      const duration = Date.now() - startTime;
+      const duration = performance.now() - startTime;
 
       res.writeHead(200);
       res.end(JSON.stringify({
@@ -307,7 +378,7 @@ class PrismDaemon {
   }
 
   /**
-   * Index project files with incremental support
+   * Index project files with parallel processing
    */
   async indexProject() {
     try {
@@ -320,38 +391,43 @@ class PrismDaemon {
       // Check if we have existing metadata cache
       const hasCache = this.fileMetadataCache.size > 0;
 
-      console.log(`[PRISM] Starting incremental indexing - ${files.length} files found`);
+      console.log(`[PRISM] Starting parallel indexing - ${files.length} files found, ${this.config.parallelWorkers} workers`);
 
-      for (const filePath of files) {
-        try {
-          // Check if file needs reindexing
-          const needsReindex = await this.fileNeedsReindex(filePath);
+      // Separate files into batches for parallel processing
+      const workerBatches = this.createWorkerBatches(files);
+      const processor = new WorkerFileProcessor(this.config);
 
-          if (!needsReindex && this.indexedFiles?.[filePath]) {
-            // Keep existing data
-            indexedFiles[filePath] = this.indexedFiles[filePath];
-            this.fileMetadataCache.set(filePath, this.getMetadataKey(filePath));
-            skippedFiles++;
-            continue;
-          }
+      // Process batches in parallel
+      for (const batch of workerBatches) {
+        if (batch.length === 0) continue;
 
-          // File needs reindexing
-          const fileData = await this.indexFile(filePath);
-          if (fileData) {
-            indexedFiles[filePath] = fileData;
-            this.fileMetadataCache.set(filePath, this.getMetadataKey(filePath));
+        const batchResults = await this.processFileBatch(batch, processor);
+
+        // Process results
+        for (const result of batchResults) {
+          if (result.fileData) {
+            indexedFiles[result.filePath] = result.fileData;
+            this.fileMetadataCache.set(result.filePath, this.getMetadataKey(result.filePath));
             filesCount++;
             changedFiles++;
-
-            // Respect max files limit
-            if (filesCount >= this.config.maxFiles) {
-              console.log(`[PRISM] Reached max files limit (${this.config.maxFiles})`);
-              break;
+          } else if (result.skipped) {
+            // Keep existing data
+            if (this.indexedFiles?.[result.filePath]) {
+              indexedFiles[result.filePath] = this.indexedFiles[result.filePath];
+              this.fileMetadataCache.set(result.filePath, this.getMetadataKey(result.filePath));
             }
+            skippedFiles++;
           }
-        } catch (error) {
-          console.log(`[PRISM] Skipped file ${filePath}:`, error.message);
         }
+
+        // Respect max files limit
+        if (filesCount >= this.config.maxFiles) {
+          console.log(`[PRISM] Reached max files limit (${this.config.maxFiles})`);
+          break;
+        }
+
+        // Reset memory between batches
+        processor.resetMemory();
       }
 
       this.indexedFiles = indexedFiles;
@@ -373,6 +449,129 @@ class PrismDaemon {
       console.error('[PRISM] Indexing failed:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * Create worker batches for parallel processing with optimization for large projects
+   */
+  createWorkerBatches(files) {
+    const batchSize = this.config.batchSize;
+    const batches = [];
+
+    // For very large projects, create smaller batches to prevent memory issues
+    if (files.length > 10000 && this.config.monorepoOptimization) {
+      console.log(`[PRISM] Using optimized batch size of ${batchSize} for ${files.length} files`);
+    }
+
+    // Create batches based on the configured size
+    for (let i = 0; i < files.length; i += batchSize) {
+      const batch = files.slice(i, i + Math.min(batchSize, files.length - i));
+      batches.push(batch);
+    }
+
+    // Balance batch sizes for better worker utilization
+    if (batches.length > 1 && batches.length <= this.config.parallelWorkers * 2) {
+      // Rebalance batches to be more evenly sized
+      const totalFiles = files.length;
+      const targetBatchSize = Math.ceil(totalFiles / this.config.parallelWorkers);
+      const rebalancedBatches = [];
+
+      let currentBatch = [];
+      let currentSize = 0;
+
+      for (const batch of batches) {
+        for (const file of batch) {
+          currentBatch.push(file);
+          currentSize++;
+
+          if (currentSize >= targetBatchSize) {
+            rebalancedBatches.push(currentBatch);
+            currentBatch = [];
+            currentSize = 0;
+          }
+        }
+      }
+
+      // Add remaining files
+      if (currentBatch.length > 0) {
+        rebalancedBatches.push(currentBatch);
+      }
+
+      return rebalancedBatches;
+    }
+
+    return batches;
+  }
+
+  /**
+   * Process a batch of files with worker thread
+   */
+  async processFileBatch(batch, processor) {
+    if (!this.config.useWorkers || batch.length < 3) {
+      // Sequential processing for small batches or when workers disabled
+      return await this.processBatchSequentially(batch);
+    }
+
+    return await this.processBatchWithWorker(batch, processor);
+  }
+
+  /**
+   * Process batch sequentially (fallback)
+   */
+  async processBatchSequentially(batch) {
+    const results = [];
+
+    for (const filePath of batch) {
+      try {
+        const needsReindex = await this.fileNeedsReindex(filePath);
+
+        if (!needsReindex && this.indexedFiles?.[filePath]) {
+          results.push({ filePath, fileData: null, skipped: true });
+          continue;
+        }
+
+        const fileData = await this.indexFile(filePath);
+        results.push({ filePath, fileData, skipped: false });
+      } catch (error) {
+        console.log(`[PRISM] Skipped file ${filePath}:`, error.message);
+        results.push({ filePath, fileData: null, skipped: true });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Process batch with worker thread for parallel execution
+   */
+  async processBatchWithWorker(batch, processor) {
+    return new Promise((resolve, reject) => {
+      const worker = new Worker('./daemon/worker-processor.js', {
+        workerData: {
+          batch,
+          config: this.config,
+          fileMetadataCache: Array.from(this.fileMetadataCache.entries())
+        }
+      });
+
+      worker.on('message', (result) => {
+        resolve(result);
+      });
+
+      worker.on('error', (error) => {
+        console.error('[PRISM] Worker error:', error.message);
+        // Fallback to sequential processing
+        this.processBatchSequentially(batch).then(resolve).catch(reject);
+      });
+
+      worker.on('exit', (code) => {
+        if (code !== 0) {
+          console.error(`[PRISM] Worker stopped with exit code ${code}`);
+          // Fallback to sequential processing
+          this.processBatchSequentially(batch).then(resolve).catch(reject);
+        }
+      });
+    });
   }
 
   /**
@@ -462,23 +661,66 @@ class PrismDaemon {
   }
 
   /**
-   * Scan project for files to index
+   * Scan project for files to index with monorepo optimizations
    */
   async scanProjectFiles() {
     const files = [];
-    const excludeDirs = ['node_modules', '.git', 'dist', 'build', '.cache', 'venv', '__pycache__'];
+    const excludeDirs = [
+      'node_modules', '.git', 'dist', 'build', '.cache', 'venv', '__pycache__',
+      '.next', '.nuxt', '.out', '.tsc', 'coverage', 'e2e', 'test-results'
+    ];
 
-    async function scanDir(dir) {
+    // Large monorepo patterns to exclude
+    const largeExcludePatterns = [
+      '/vendor/',
+      '/bower_components/',
+      '/.yarn/',
+      '/node_modules/.cache/',
+      '/build-artifacts/',
+      '/dist-newlib/',
+      '/dist-gcc/',
+      '/.gradle/',
+      '/target/',
+      '/venv/',
+      '/env/',
+      '/site-packages/'
+    ];
+
+    async function scanDir(dir, depth = 0) {
       try {
         const entries = await fs.readdir(dir, { withFileTypes: true });
+
+        // For very large directories, limit scanning depth
+        if (depth > 10) return;
 
         for (const entry of entries) {
           const fullPath = path.join(dir, entry.name);
 
           // Skip excluded directories
           if (entry.isDirectory()) {
+            // Check if this should be excluded for large monorepos
+            if (this.config.monorepoOptimization) {
+              const relativePath = path.relative(this.config.projectRoot, fullPath);
+
+              // Skip vendor directories in monorepos
+              if (largeExcludePatterns.some(pattern => relativePath.includes(pattern))) {
+                continue;
+              }
+
+              // Skip non-essential directories in very large projects
+              if (this.config.maxFiles > 10000) {
+                if (['docs', 'examples', 'samples', 'benchmarks', 'fixtures'].includes(entry.name)) {
+                  // Only scan top-level directories with these names
+                  if (depth === 0) {
+                    await scanDir.call(this, fullPath, depth + 1);
+                  }
+                  continue;
+                }
+              }
+            }
+
             if (!excludeDirs.includes(entry.name)) {
-              await scanDir(fullPath);
+              await scanDir.call(this, fullPath, depth + 1);
             }
             continue;
           }
@@ -491,9 +733,33 @@ class PrismDaemon {
             // Check file size
             try {
               const stats = await fs.stat(fullPath);
-              if (stats.size <= this.config.maxFileSize) {
+
+              // Monorepo file size optimization
+              if (stats.size > this.config.maxFileSize) {
+                console.log(`[PRISM] Skipping large file: ${fullPath} (${stats.size / 1024 / 1024}MB)`);
+                continue;
+              }
+
+              // Prioritize src/lib directories
+              if (this.config.prioritizeSrcFiles) {
+                const relativePath = path.relative(this.config.projectRoot, fullPath);
+                const srcPriority = relativePath.includes('/src/') || relativePath.includes('/lib/');
+                const testFile = relativePath.includes('/test/') || relativePath.includes('/tests/');
+
+                if (testFile && this.config.maxFiles > 10000) {
+                  // De-prioritize test files in large projects
+                  continue;
+                }
+
+                if (srcPriority) {
+                  files.unshift(fullPath); // Add to beginning for priority processing
+                } else {
+                  files.push(fullPath);
+                }
+              } else {
                 files.push(fullPath);
               }
+
             } catch (error) {
               // Skip if we can't stat the file
             }
@@ -522,12 +788,13 @@ class PrismDaemon {
         return null;
       }
 
-      // Use streaming for large files to save memory
+      // Use regular file reading for now (streaming to be implemented later)
       let content;
-      if (fileSize > 50 * 1024) { // 50KB+
-        content = await this.streamReadFile(filePath, this.config.maxFileSize);
-      } else {
+      try {
         content = await fs.readFile(filePath, 'utf8');
+      } catch (error) {
+        console.log(`[PRISM] Error reading file ${filePath}:`, error.message);
+        return null;
       }
 
       // Update memory usage
@@ -554,36 +821,46 @@ class PrismDaemon {
     return new Promise((resolve, reject) => {
       const chunks = [];
       let totalLength = 0;
-      const stream = fs.createReadStream(filePath, { encoding: 'utf8' });
 
-      stream.on('data', (chunk) => {
-        totalLength += chunk.length;
+      try {
+        const stream = fs.createReadStream(filePath, { encoding: 'utf8' });
 
-        // Respect max file size
-        if (totalLength > maxSize) {
-          stream.destroy();
-          reject(new Error(`File too large: ${filePath}`));
-          return;
-        }
+        stream.on('data', (chunk) => {
+          totalLength += chunk.length;
 
-        chunks.push(chunk);
-      });
+          // Respect max file size
+          if (totalLength > maxSize) {
+            stream.destroy();
+            reject(new Error(`File too large: ${filePath}`));
+            return;
+          }
 
-      stream.on('end', () => {
-        resolve(chunks.join(''));
-      });
+          chunks.push(chunk);
+        });
 
-      stream.on('error', (error) => {
+        stream.on('end', () => {
+          resolve(chunks.join(''));
+        });
+
+        stream.on('error', (error) => {
+          reject(error);
+        });
+
+        // Handle timeout
+        const timeout = setTimeout(() => {
+          if (!stream.destroyed) {
+            stream.destroy();
+            reject(new Error(`File read timeout: ${filePath}`));
+          }
+        }, 5000);
+
+        stream.on('close', () => {
+          clearTimeout(timeout);
+        });
+
+      } catch (error) {
         reject(error);
-      });
-
-      // Handle timeout
-      setTimeout(() => {
-        if (!stream.destroyed) {
-          stream.destroy();
-          reject(new Error(`File read timeout: ${filePath}`));
-        }
-      }, 5000);
+      }
     });
   }
 
@@ -609,6 +886,26 @@ class PrismDaemon {
   }
 
   /**
+   * Send performance response
+   */
+  sendPerformanceResponse(res) {
+    const report = this.performanceMonitor.getReport();
+
+    res.writeHead(200);
+    res.end(JSON.stringify(report, null, 2));
+  }
+
+  /**
+   * Send diagnostics response
+   */
+  sendDiagnosticsResponse(res) {
+    const diagnostics = this.performanceMonitor.getDiagnostics();
+
+    res.writeHead(200);
+    res.end(JSON.stringify(diagnostics, null, 2));
+  }
+
+  /**
    * Send statistics response
    */
   sendStatsResponse(res) {
@@ -626,56 +923,24 @@ class PrismDaemon {
   }
 
   /**
-   * Enhanced search implementation with intelligent scoring
+   * Enhanced search implementation with fuzzy matching
    */
   simpleSearch(query) {
     if (!query || query.length < 2) {
       return [];
     }
 
-    const lowerQuery = query.toLowerCase();
-    const queryWords = lowerQuery.split(/\s+/).filter(word => word.length > 0);
-    const results = [];
-
+    // Use advanced fuzzy search with smart defaults
     if (!this.indexedFiles) {
       return [];
     }
 
-    for (const [filePath, fileData] of Object.entries(this.indexedFiles)) {
-      let score = 0;
-      let contentSnippet = '';
-      let matchLine = 1;
-
-      // Enhanced filename scoring
-      score += this.scoreFilenameMatch(query, filePath, queryWords);
-
-      // Enhanced content scoring
-      if (fileData.content) {
-        const contentScore = this.scoreContentMatch(query, fileData.content, queryWords);
-        const { snippet, line } = this.getContentSnippet(fileData.content, queryWords);
-
-        score += contentScore;
-        contentSnippet = snippet || `File contains "${query}"`;
-        matchLine = line;
-      }
-
-      // Contextual scoring based on project structure
-      score += this.scoreContext(filePath);
-
-      if (score > 0) {
-        results.push({
-          file: filePath,
-          content: contentSnippet,
-          score: Math.min(score, 1.0),
-          line: matchLine
-        });
-      }
-    }
-
-    // Sort by score (descending) and return top 10
-    return results
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 10);
+    return this.fuzzySearch.advancedSearch(query, this.indexedFiles, {
+      threshold: 0.2, // Lower threshold for better matches
+      maxResults: 10,
+      fuzzy: true,
+      stem: true
+    });
   }
 
   /**
@@ -818,9 +1083,13 @@ class PrismDaemon {
     try {
       await this.initialize();
 
+      // Start performance monitoring
+      this.performanceMonitor.start();
+
       this.server.listen(this.config.port, () => {
         console.log(`[PRISM] Server running on http://localhost:${this.config.port}`);
         console.log(`[PRISM] Health check: http://localhost:${this.config.port}/health`);
+        console.log(`[PRISM] Performance monitoring enabled`);
         this.isRunning = true;
       });
 
