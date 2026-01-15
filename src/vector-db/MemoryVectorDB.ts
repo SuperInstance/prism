@@ -331,7 +331,7 @@ export class MemoryVectorDB implements IVectorDatabase {
    *
    * pathFilter:
    * - Glob pattern matching
-   * - Example: "src/**/*.ts" matches only TypeScript in src/
+   * - Example: "src/**\/*.ts" matches only TypeScript in src/
    * - Uses simple regex conversion
    *
    * languageFilter:
