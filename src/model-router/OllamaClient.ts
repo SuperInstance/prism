@@ -82,10 +82,19 @@ export class OllamaClient {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch models: ${response.statusText}`);
+        throw new Error(`Failed to fetch models: HTTP ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json() as { models?: OllamaModel[] };
+      let data: { models?: OllamaModel[] };
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        throw createPrismError(
+          ErrorCode.MODEL_ROUTING_FAILED,
+          'Failed to parse Ollama API response: Invalid JSON format',
+          { originalError: parseError instanceof Error ? parseError.message : String(parseError) }
+        );
+      }
 
       return data.models || [];
     } catch (error) {
@@ -151,10 +160,19 @@ export class OllamaClient {
       });
 
       if (!response.ok) {
-        throw new Error(`Ollama returned ${response.status}: ${response.statusText}`);
+        throw new Error(`Ollama returned HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const data = await response.json() as OllamaResponse;
+      let data: OllamaResponse;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        throw createPrismError(
+          ErrorCode.MODEL_ROUTING_FAILED,
+          'Failed to parse Ollama generate response: Invalid JSON format',
+          { originalError: parseError instanceof Error ? parseError.message : String(parseError) }
+        );
+      }
 
       if (data.error) {
         throw new Error(`Ollama error: ${data.error}`);
@@ -274,13 +292,20 @@ export class OllamaClient {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to get version: ${response.statusText}`);
+        throw new Error(`Failed to get version: HTTP ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json() as { version?: string };
+      let data: { version?: string };
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error('[Ollama] Failed to parse version response:', parseError);
+        return 'unknown';
+      }
 
       return data.version || 'unknown';
-    } catch {
+    } catch (error) {
+      console.error('[Ollama] Failed to get version:', error);
       return 'unknown';
     }
   }

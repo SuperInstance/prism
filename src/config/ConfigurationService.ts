@@ -348,14 +348,30 @@ export class ConfigurationService implements IConfigurationService {
     try {
       const response = await fetch(filePath);
       if (!response.ok) {
-        throw new Error(`Failed to load config file: ${response.statusText}`);
+        throw createPrismError(
+          ErrorCode.INVALID_CONFIG,
+          `Failed to load config file: HTTP ${response.status} ${response.statusText}`,
+          { statusCode: response.status, filePath }
+        );
       }
 
       const contentType = response.headers.get('content-type');
       const text = await response.text();
 
       if (filePath.endsWith('.json') || contentType?.includes('json')) {
-        return JSON.parse(text);
+        try {
+          return JSON.parse(text);
+        } catch (parseError) {
+          throw createPrismError(
+            ErrorCode.INVALID_CONFIG,
+            `Failed to parse config file as JSON: ${parseError instanceof Error ? parseError.message : 'Invalid JSON format'}`,
+            {
+              originalError: parseError,
+              filePath,
+              preview: text.substring(0, 100)
+            }
+          );
+        }
       }
 
       // YAML parsing would require a YAML library
@@ -365,10 +381,15 @@ export class ConfigurationService implements IConfigurationService {
         'YAML config files not yet supported. Use JSON format.'
       );
     } catch (error) {
+      // If error is already a PrismError, re-throw it
+      if (error && typeof error === 'object' && 'code' in error) {
+        throw error;
+      }
+
       throw createPrismError(
         ErrorCode.INVALID_CONFIG,
-        `Failed to load config file: ${filePath}`,
-        { originalError: error }
+        `Failed to load config file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        { originalError: error, filePath }
       );
     }
   }

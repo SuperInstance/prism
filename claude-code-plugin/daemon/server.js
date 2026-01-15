@@ -105,18 +105,73 @@ class PrismDaemon {
    * Handle search request
    */
   handleSearch(req, res) {
+    const MAX_REQUEST_SIZE = 1024 * 1024; // 1MB limit
     let data = '';
-    req.on('data', chunk => data += chunk);
+    let bytesReceived = 0;
+
+    req.on('data', chunk => {
+      bytesReceived += chunk.length;
+
+      // Check if request exceeds size limit
+      if (bytesReceived > MAX_REQUEST_SIZE) {
+        req.destroy();
+        res.writeHead(413);
+        res.end(JSON.stringify({
+          error: 'Request too large',
+          message: `Request size exceeds ${MAX_REQUEST_SIZE} bytes limit`
+        }));
+        return;
+      }
+
+      data += chunk;
+    });
+
     req.on('end', () => {
       try {
-        const searchQuery = JSON.parse(data).query || '';
+        let requestBody;
+        try {
+          requestBody = JSON.parse(data);
+        } catch (parseError) {
+          res.writeHead(400);
+          res.end(JSON.stringify({
+            error: 'Invalid JSON',
+            message: 'Request body must be valid JSON'
+          }));
+          return;
+        }
+
+        const searchQuery = requestBody.query || '';
+
+        // Validate query length
+        if (searchQuery.length > 10000) {
+          res.writeHead(400);
+          res.end(JSON.stringify({
+            error: 'Query too long',
+            message: 'Search query must be less than 10000 characters'
+          }));
+          return;
+        }
+
         const results = this.simpleSearch(searchQuery);
         res.writeHead(200);
         res.end(JSON.stringify({ results }));
       } catch (error) {
+        console.error('[PRISM] Search error:', error);
         res.writeHead(500);
-        res.end(JSON.stringify({ error: 'Invalid search request' }));
+        res.end(JSON.stringify({
+          error: 'Internal server error',
+          message: 'An error occurred while processing search request'
+        }));
       }
+    });
+
+    req.on('error', (error) => {
+      console.error('[PRISM] Request error:', error);
+      res.writeHead(400);
+      res.end(JSON.stringify({
+        error: 'Bad request',
+        message: 'Request connection error'
+      }));
     });
   }
 

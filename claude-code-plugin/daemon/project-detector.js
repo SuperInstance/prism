@@ -107,7 +107,14 @@ class ProjectDetector {
     try {
       await fs.access(path.join(this.projectRoot, 'package.json'));
       const packageJson = await fs.readFile(path.join(this.projectRoot, 'package.json'), 'utf8');
-      const packageData = JSON.parse(packageJson);
+
+      let packageData;
+      try {
+        packageData = JSON.parse(packageJson);
+      } catch (parseError) {
+        console.error('[Project Detector] Failed to parse package.json: Invalid JSON format', parseError.message);
+        return null;
+      }
 
       this.projectInfo.type = 'node';
 
@@ -142,9 +149,16 @@ class ProjectDetector {
       // Check if it's a TypeScript project
       if (this.projectInfo.type === 'node') {
         const packageJson = await fs.readFile(path.join(this.projectRoot, 'package.json'), 'utf8');
-        const packageData = JSON.parse(packageJson);
 
-        if (packageData.dependencies && packageData.dependencies.typescript) {
+        let packageData;
+        try {
+          packageData = JSON.parse(packageJson);
+        } catch (parseError) {
+          console.error('[Project Detector] Failed to parse package.json for TypeScript detection: Invalid JSON format', parseError.message);
+          // Continue to check tsconfig.json
+        }
+
+        if (packageData && packageData.dependencies && packageData.dependencies.typescript) {
           this.projectInfo.language = 'typescript';
           return 'typescript';
         }
@@ -364,7 +378,14 @@ class ProjectDetector {
     try {
       if (this.projectInfo.type === 'node') {
         const packageJson = await fs.readFile(path.join(this.projectRoot, 'package.json'), 'utf8');
-        const packageData = JSON.parse(packageJson);
+
+        let packageData;
+        try {
+          packageData = JSON.parse(packageJson);
+        } catch (parseError) {
+          console.error('[Project Detector] Failed to parse package.json for dependencies: Invalid JSON format', parseError.message);
+          return;
+        }
 
         this.projectInfo.dependencies = Object.keys(packageData.dependencies || {});
         this.projectInfo.devDependencies = Object.keys(packageData.devDependencies || {});
