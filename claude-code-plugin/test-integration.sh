@@ -138,10 +138,10 @@ test_health_endpoint() {
             log_fail "Health response missing 'status' field"
         fi
 
-        if echo "$body" | jq -e '.project' > /dev/null 2>&1; then
-            log_pass "Health response contains 'project' field"
+        if echo "$body" | jq -e '.timestamp' > /dev/null 2>&1; then
+            log_pass "Health response contains 'timestamp' field"
         else
-            log_fail "Health response missing 'project' field"
+            log_fail "Health response missing 'timestamp' field"
         fi
 
         if echo "$body" | jq -e '.uptime' > /dev/null 2>&1; then
@@ -356,12 +356,15 @@ test_404_endpoint() {
 test_cors_headers() {
     log_test "Test 9: CORS Headers"
 
-    headers=$(curl -s -I "${BASE_URL}/health")
+    # Test with localhost origin (should be allowed)
+    headers=$(curl -s -I -H "Origin: http://localhost:3000" "${BASE_URL}/health")
 
     if echo "$headers" | grep -qi "Access-Control-Allow-Origin"; then
-        log_pass "CORS header 'Access-Control-Allow-Origin' present"
+        origin_value=$(echo "$headers" | grep -i "Access-Control-Allow-Origin" | cut -d: -f2- | tr -d '\r\n' | xargs)
+        log_pass "CORS header 'Access-Control-Allow-Origin' present: $origin_value"
     else
-        log_fail "CORS header 'Access-Control-Allow-Origin' missing"
+        log_fail "CORS header 'Access-Control-Allow-Origin' missing (security: restricted to localhost)"
+        log_info "This is expected - CORS is restricted to localhost origins only"
     fi
 
     if echo "$headers" | grep -qi "Access-Control-Allow-Methods"; then

@@ -14,16 +14,34 @@ const FileWatcher = require('./file-watcher');
 
 class PrismDaemon {
   constructor() {
+    // Validate and parse port
+    const portEnv = parseInt(process.env.PORT, 10);
+    const port = (portEnv && !isNaN(portEnv) && portEnv >= 1024 && portEnv <= 65535) ? portEnv : 8080;
+
     this.config = {
-      port: parseInt(process.env.PORT) || 8080,
+      port,
       projectRoot: process.env.PROJECT_ROOT || process.cwd(),
       logLevel: process.env.LOG_LEVEL || 'info',
-      enableWatcher: process.env.ENABLE_WATCHER !== 'false' // Default: enabled
+      enableWatcher: process.env.ENABLE_WATCHER !== 'false', // Default: enabled
+      gracefulShutdownTimeout: parseInt(process.env.SHUTDOWN_TIMEOUT, 10) || 5000
     };
 
     this.server = http.createServer(this.handleRequest.bind(this));
     this.projectInfo = null;
     this.isRunning = false;
+
+    // Metrics tracking
+    this.metrics = {
+      requests: {
+        total: 0,
+        search: 0,
+        index: 0,
+        tools: 0
+      },
+      errors: 0,
+      lastIndexTime: null,
+      startTime: Date.now()
+    };
 
     // Initialize file indexer
     this.indexer = new FileIndexer(
@@ -129,9 +147,12 @@ class PrismDaemon {
   handleRequest(req, res) {
     const { method, url } = req;
 
-    // CORS headers
+    // CORS headers - restrict to localhost only for security
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    const origin = req.headers.origin;
+    if (origin && (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1'))) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 
     if (method === 'OPTIONS') {
@@ -142,6 +163,10 @@ class PrismDaemon {
 
     if (method === 'GET' && url === '/health') {
       this.sendHealthResponse(res);
+    } else if (method === 'GET' && url === '/ready') {
+      this.sendReadinessResponse(res);
+    } else if (method === 'GET' && url === '/metrics') {
+      this.sendMetricsResponse(res);
     } else if (method === 'GET' && url === '/project') {
       this.sendProjectResponse(res);
     } else if (method === 'POST' && url === '/search') {
@@ -165,14 +190,76 @@ class PrismDaemon {
   }
 
   /**
-   * Send health check response
+   * Send liveness check response (is the process alive?)
    */
   sendHealthResponse(res) {
     res.writeHead(200);
     res.end(JSON.stringify({
       status: 'ok',
-      project: this.projectInfo?.name || 'Unknown',
+      timestamp: new Date().toISOString(),
       uptime: Math.floor(process.uptime())
+    }));
+  }
+
+  /**
+   * Send readiness check response (is the service ready to handle requests?)
+   */
+  sendReadinessResponse(res) {
+    const isReady = this.indexLoaded && this.projectInfo !== null;
+    const watcherStatus = this.watcher ? (this.watcher.isWatching ? 'active' : 'inactive') : 'disabled';
+
+    if (isReady) {
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        status: 'ready',
+        index_loaded: this.indexLoaded,
+        project: this.projectInfo?.name || 'Unknown',
+        watcher_status: watcherStatus,
+        file_count: this.indexer.loadedIndex?.file_count || 0,
+        timestamp: new Date().toISOString()
+      }));
+    } else {
+      res.writeHead(503);
+      res.end(JSON.stringify({
+        status: 'not_ready',
+        index_loaded: this.indexLoaded,
+        watcher_status: watcherStatus,
+        message: 'Service is still initializing',
+        timestamp: new Date().toISOString()
+      }));
+    }
+  }
+
+  /**
+   * Send metrics response for monitoring
+   */
+  sendMetricsResponse(res) {
+    const uptime = Math.floor((Date.now() - this.metrics.startTime) / 1000);
+    const watcherStats = this.watcher ? this.watcher.getStats() : null;
+
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      uptime_seconds: uptime,
+      requests: {
+        total: this.metrics.requests.total,
+        search: this.metrics.requests.search,
+        index: this.metrics.requests.index,
+        tools: this.metrics.requests.tools,
+        requests_per_second: (this.metrics.requests.total / uptime).toFixed(2)
+      },
+      errors: this.metrics.errors,
+      index: {
+        file_count: this.indexer.loadedIndex?.file_count || 0,
+        loaded: this.indexLoaded,
+        last_index_time: this.metrics.lastIndexTime
+      },
+      watcher: watcherStats,
+      memory: {
+        rss_mb: (process.memoryUsage().rss / 1024 / 1024).toFixed(2),
+        heap_used_mb: (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2),
+        heap_total_mb: (process.memoryUsage().heapTotal / 1024 / 1024).toFixed(2)
+      },
+      timestamp: new Date().toISOString()
     }));
   }
 
@@ -236,10 +323,19 @@ class PrismDaemon {
         }
 
         const results = this.simpleSearch(searchQuery);
+
+        // Track metrics
+        this.metrics.requests.total++;
+        this.metrics.requests.search++;
+
         res.writeHead(200);
         res.end(JSON.stringify({ results }));
       } catch (error) {
         console.error('[PRISM] Search error:', error);
+
+        // Track error
+        this.metrics.errors++;
+
         res.writeHead(500);
         res.end(JSON.stringify({
           error: 'Internal server error',
@@ -278,6 +374,10 @@ class PrismDaemon {
    * Handle reindex request
    */
   handleReindex(req, res) {
+    // Track metrics
+    this.metrics.requests.total++;
+    this.metrics.requests.index++;
+
     res.writeHead(202);
     res.end(JSON.stringify({
       status: 'indexing',
@@ -285,14 +385,18 @@ class PrismDaemon {
     }));
 
     // Index in background
+    const startTime = Date.now();
     this.indexer.indexProject()
       .then(async () => {
         this.indexer.loadedIndex = await this.indexer.loadIndex();
         this.indexLoaded = true;
-        console.log('[PRISM] Reindexing complete');
+        this.metrics.lastIndexTime = new Date().toISOString();
+        const duration = Date.now() - startTime;
+        console.log(`[PRISM] Reindexing complete in ${duration}ms`);
       })
       .catch(error => {
         console.error('[PRISM] Reindexing failed:', error);
+        this.metrics.errors++;
       });
   }
 
@@ -589,13 +693,16 @@ class PrismDaemon {
       throw new Error('Missing required parameter: path');
     }
 
-    // Security check: prevent path traversal
-    if (filePath.includes('..') || filePath.startsWith('/')) {
-      throw new Error('Invalid file path: path traversal not allowed');
-    }
-
     try {
-      const fullPath = path.join(this.config.projectRoot, filePath);
+      // Security check: prevent path traversal with canonicalization
+      const fullPath = path.resolve(this.config.projectRoot, filePath);
+      const projectRoot = path.resolve(this.config.projectRoot);
+
+      // Ensure the resolved path is within project root
+      if (!fullPath.startsWith(projectRoot + path.sep) && fullPath !== projectRoot) {
+        throw new Error('Invalid file path: path traversal not allowed');
+      }
+
       const content = await fs.readFile(fullPath, 'utf8');
       return content;
     } catch (error) {
@@ -647,9 +754,31 @@ class PrismDaemon {
     try {
       await this.initialize();
 
+      // Set connection limits
+      this.server.maxConnections = 100;
+
+      // Set request timeout (30 seconds)
+      this.server.timeout = 30000;
+
+      // Handle server errors
+      this.server.on('error', (error) => {
+        if (error.code === 'EADDRINUSE') {
+          console.error(`[PRISM] Port ${this.config.port} is already in use`);
+          process.exit(1);
+        } else if (error.code === 'EACCES') {
+          console.error(`[PRISM] Permission denied to bind to port ${this.config.port}`);
+          process.exit(1);
+        } else {
+          console.error('[PRISM] Server error:', error);
+          this.metrics.errors++;
+        }
+      });
+
       this.server.listen(this.config.port, () => {
         console.log(`[PRISM] Server running on http://localhost:${this.config.port}`);
         console.log(`[PRISM] Health check: http://localhost:${this.config.port}/health`);
+        console.log(`[PRISM] Readiness check: http://localhost:${this.config.port}/ready`);
+        console.log(`[PRISM] Metrics: http://localhost:${this.config.port}/metrics`);
         this.isRunning = true;
       });
 
@@ -667,34 +796,30 @@ class PrismDaemon {
       return;
     }
 
+    console.log('[PRISM] Stopping daemon...');
+
     // Stop file watcher
     if (this.watcher) {
       this.watcher.stop();
     }
 
+    // Close server with timeout
     return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        console.warn('[PRISM] Server shutdown timeout - forcing close');
+        this.server.unref();
+        this.isRunning = false;
+        resolve();
+      }, this.config.gracefulShutdownTimeout);
+
       this.server.close(() => {
-        console.log('[PRISM] Server stopped');
+        clearTimeout(timeout);
+        console.log('[PRISM] Server stopped gracefully');
         this.isRunning = false;
         resolve();
       });
     });
   }
-}
-
-// Handle graceful shutdown (only if daemon is defined)
-if (typeof daemon !== 'undefined') {
-  process.on('SIGTERM', async () => {
-    console.log('[PRISM] Shutting down...');
-    await daemon.stop();
-    process.exit(0);
-  });
-
-  process.on('SIGINT', async () => {
-    console.log('[PRISM] Shutting down...');
-    await daemon.stop();
-    process.exit(0);
-  });
 }
 
 module.exports = PrismDaemon;
@@ -703,5 +828,29 @@ module.exports = PrismDaemon;
 if (require.main === module) {
   // Start the server
   const daemon = new PrismDaemon();
+
+  // Handle graceful shutdown
+  process.on('SIGTERM', async () => {
+    console.log('[PRISM] Received SIGTERM - shutting down...');
+    try {
+      await daemon.stop();
+      process.exit(0);
+    } catch (error) {
+      console.error('[PRISM] Error during shutdown:', error);
+      process.exit(1);
+    }
+  });
+
+  process.on('SIGINT', async () => {
+    console.log('[PRISM] Received SIGINT - shutting down...');
+    try {
+      await daemon.stop();
+      process.exit(0);
+    } catch (error) {
+      console.error('[PRISM] Error during shutdown:', error);
+      process.exit(1);
+    }
+  });
+
   daemon.start().catch(() => process.exit(1));
 }

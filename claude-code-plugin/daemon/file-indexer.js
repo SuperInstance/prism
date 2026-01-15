@@ -42,10 +42,13 @@ class LRUCache {
 
 class FileIndexer {
   constructor(projectRoot, indexDir) {
-    this.projectRoot = projectRoot;
+    this.projectRoot = path.resolve(projectRoot); // Canonicalize project root
     this.indexDir = indexDir;
     this.indexPath = path.join(indexDir, 'index.json');
     this.loadedIndex = null;
+
+    // Write lock to prevent concurrent index modifications
+    this.writeLock = null;
 
     // OPTIMIZATION: Add LRU cache for search results
     this.searchCache = new LRUCache(100);
@@ -391,11 +394,40 @@ class FileIndexer {
   }
 
   /**
-   * Save index to disk
+   * Acquire write lock to prevent concurrent modifications
+   */
+  async acquireWriteLock() {
+    while (this.writeLock) {
+      await this.writeLock;
+    }
+    let releaseLock;
+    this.writeLock = new Promise(resolve => {
+      releaseLock = resolve;
+    });
+    return releaseLock;
+  }
+
+  /**
+   * Save index to disk with atomic write
    */
   async saveIndex(index) {
-    await fs.mkdir(this.indexDir, { recursive: true });
-    await fs.writeFile(this.indexPath, JSON.stringify(index, null, 2));
+    const releaseLock = await this.acquireWriteLock();
+
+    try {
+      await fs.mkdir(this.indexDir, { recursive: true });
+
+      // Atomic write: write to temp file, then rename
+      const tempPath = this.indexPath + '.tmp';
+      const indexData = JSON.stringify(index, null, 2);
+
+      await fs.writeFile(tempPath, indexData, 'utf8');
+      await fs.rename(tempPath, this.indexPath);
+
+      this.loadedIndex = index;
+    } finally {
+      releaseLock();
+      this.writeLock = null;
+    }
   }
 
   /**
@@ -633,7 +665,12 @@ class FileIndexer {
     }
 
     try {
-      const fullPath = path.join(this.projectRoot, filePath);
+      // Security check: validate path stays within project root
+      const fullPath = path.resolve(this.projectRoot, filePath);
+      if (!fullPath.startsWith(this.projectRoot + path.sep) && fullPath !== this.projectRoot) {
+        throw new Error('Invalid file path: path traversal not allowed');
+      }
+
       const content = await fs.readFile(fullPath, 'utf8');
 
       // Cache with size limit (max 50 files)

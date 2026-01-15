@@ -95,6 +95,31 @@ class FileWatcher extends EventEmitter {
   }
 
   /**
+   * Restart a specific watcher after an error
+   */
+  async restartWatcher(dir) {
+    console.log(`[FileWatcher] Restarting watcher for ${dir}...`);
+
+    // Close existing watcher if present
+    const existingWatcher = this.watchers.get(dir);
+    if (existingWatcher) {
+      try {
+        existingWatcher.close();
+      } catch (error) {
+        // Ignore close errors
+      }
+      this.watchers.delete(dir);
+    }
+
+    // Wait a bit before restarting to avoid rapid restart loops
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Restart watching this directory
+    await this.watchDirectory(dir);
+    console.log(`[FileWatcher] Watcher restarted for ${dir}`);
+  }
+
+  /**
    * Watch a directory recursively
    */
   async watchDirectory(dir) {
@@ -122,6 +147,11 @@ class FileWatcher extends EventEmitter {
       watcher.on('error', (error) => {
         console.warn(`[FileWatcher] Watcher error for ${dir}:`, error.message);
         this.stats.errors++;
+
+        // Auto-restart watcher on error
+        this.restartWatcher(dir).catch(err => {
+          console.error(`[FileWatcher] Failed to restart watcher for ${dir}:`, err.message);
+        });
       });
 
       this.watchers.set(dir, watcher);
