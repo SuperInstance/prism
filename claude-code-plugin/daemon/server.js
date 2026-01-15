@@ -10,7 +10,7 @@ const path = require('path');
 const http = require('http');
 const SimpleProjectDetector = require('./simple-project-detector');
 
-class SimplePrismDaemon {
+class PrismDaemon {
   constructor() {
     this.config = {
       port: parseInt(process.env.PORT) || 8080,
