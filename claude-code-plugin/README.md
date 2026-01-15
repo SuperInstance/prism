@@ -16,9 +16,9 @@ Provide a rock-solid plugin that enhances Claude Code's understanding of your pr
 
 ### What This Version Is NOT
 
-- **Not semantic search**: Basic keyword matching only
-- **Not AI-powered**: No embeddings or vector databases
-- **Not complex**: No advanced features or configuration
+- **Not advanced search**: Simple keyword matching only
+- **Not AI-powered**: No external services or processing
+- **Not complex**: No additional features or configuration needed
 - **Not cloud-based**: Everything runs locally on your machine
 
 ## 🚀 Installation
@@ -196,8 +196,8 @@ rm -rf .prism/cache
 
 This is the **Local JSON** version of PRISM. Other versions may offer:
 
-- **PRISM Cloud**: Cloudflare Vectorize for semantic search
-- **PRISM Enterprise**: Advanced features and support
+- **PRISM Cloud**: Cloud-hosted version with advanced features
+- **PRISM Enterprise**: Team collaboration and support
 - **PRISM Self-Host**: Private deployment options
 
 Choose the version that best fits your needs.

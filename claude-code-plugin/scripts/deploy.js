@@ -219,7 +219,7 @@ ${this.packageJson.description}
 ## Features
 
 - Enhanced project memory for Claude Code
-- Semantic code search with context awareness
+- Fast code search with local indexing
 - Background indexing and caching
 - Auto-detection of project structure
 - Zero-configuration setup
