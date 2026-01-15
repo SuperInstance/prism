@@ -221,3 +221,6 @@ We welcome contributions! Please keep the focus on simplicity and stability.
 **PRISM Local JSON** - Making Claude Code better, simply and reliably. 🚀
 
 > For projects that need enhanced capabilities without complexity.
+>
+> ---
+> **Cache Bust Marker:** $(date) - This should show CDN is updated
