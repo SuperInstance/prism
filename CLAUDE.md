@@ -608,7 +608,373 @@ You are the lead. Your job is to:
 
 ---
 
-**Last Updated:** Phase 1 Complete
-**Current Status:** 🚀 Production-Ready Beta
-**Next Phase:** Performance Optimization (Week 4)
-**Launch Target:** Q2 2026
+---
+
+## 🎯 NEW FOCUS: Claude Code Plugin Development
+
+### ✅ Repository Split COMPLETED
+
+**Dual Repository Strategy:**
+1. **Standalone PRISM** (Cloudflare): https://github.com/SuperInstance/prism
+   - Web-based interface with semantic search
+   - Cloud infrastructure, multi-user support
+   - Advanced AI features and collaboration
+
+2. **Claude PRISM Plugin** (Local JSON): https://github.com/SuperInstance/Claude-prism-local-json
+   - Local MCP plugin for Claude Code
+   - Background project memory enhancement
+   - No cloud dependencies, 100% offline
+
+---
+
+## 🚀 Claude Code Plugin Enhancement Initiative
+
+### Vision: "Seamless Background Memory for Claude Code"
+
+**Current State:** Basic MCP plugin with 4 tools
+**Target State:** "Install and forget" plugin that automatically enhances Claude's project understanding
+
+### Enhancement Roadmap
+
+#### Phase A: Plugin Infrastructure (Current Focus)
+
+| Feature | Status | Priority |
+|--------|--------|----------|
+| Auto-detection of project structure | ⏳ Pending | CRITICAL |
+| Background indexing | ⏳ Pending | HIGH |
+| Smart caching strategies | ⏳ Pending | HIGH |
+| Plugin discovery mechanism | ⏳ Pending | MEDIUM |
+
+#### Phase B: Enhanced Project Memory
+
+| Feature | Status | Priority |
+|--------|--------|----------|
+| Dependency graph generation | ⏳ Pending | HIGH |
+| Code relationship mapping | ⏳ Pending | HIGH |
+| Change tracking & context | ⏳ Pending | MEDIUM |
+| Project-specific optimizations | ⏳ Pending | MEDIUM |
+
+#### Phase C: Seamless Integration
+
+| Feature | Status | Priority |
+|--------|--------|----------|
+| Claude Code plugin registry | ⏳ Pending | CRITICAL |
+| One-click installation | ⏳ Pending | HIGH |
+| Auto-update mechanism | ⏳ Pending | MEDIUM |
+| Configuration management | ⏳ Pending | MEDIUM |
+
+---
+
+## 🎯 Immediate Next Steps (Claude Plugin Focus)
+
+### 1. Plugin Discovery System
+- Research Claude Code plugin registry standards
+- Implement auto-discovery of projects
+- Create intelligent project detection
+
+### 2. Background Memory Enhancement
+- Develop intelligent indexing strategies
+- Implement smart caching layers
+- Add relationship mapping between code elements
+
+### 3. Zero-Configuration Setup
+- Auto-detect project type and language
+- Optimize search parameters automatically
+- Provide transparent background operation
+
+### 4. Enhanced Context Awareness
+- Track project dependencies
+- Understand code relationships
+- Maintain awareness of recent changes
+
+---
+
+## AGENT SPECIALIZATION FOR PLUGIN DEVELOPMENT
+
+### Enhanced Team Structure
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    LEAD ARCHITECT                           │
+│  - Plugin Architecture Design                               │
+│  - Claude Code Integration Strategy                        │
+│  - Background Memory Systems                                │
+│  - Quality Assurance for Plugin Ecosystem                  │
+└──────┬────────────┬────────────┬────────────┬───────────────┘
+       │            │            │            │
+       ▼            ▼            ▼            ▼
+  ┌────────┐  ┌────────┐  ┌────────┐  ┌──────────┐
+  │Builder │  │Coder   │  │Architect│  │Research  │
+  │        │  │        │  │        │  │  Agent   │
+  │Plugins │  │Memory  │  │Claude   │  │          │
+  │        │  │Systems │  │Integration│  │          │
+  └────────┘  └────────┘  └────────┘  └──────────┘
+```
+
+### Agent Focus Areas
+
+**Plugin Builder**
+- Claude Code plugin infrastructure
+- Installation and distribution mechanisms
+- Plugin registry integration
+- Configuration management systems
+
+**Memory Systems Coder**
+- Background indexing algorithms
+- Intelligent caching strategies
+- Relationship mapping engines
+- Change tracking systems
+
+**Claude Integration Architect**
+- MCP protocol optimization
+- Claude Code communication patterns
+- Context enhancement strategies
+- User experience design
+
+**Research Agent**
+- Claude Code plugin ecosystem research
+- Best practices for background memory
+- Performance optimization research
+- User behavior analysis
+
+---
+
+## RESEARCH QUESTIONS
+
+### Claude Code Plugin System
+1. How does Claude Code discover and load plugins?
+2. What are the standard patterns for plugin development?
+3. How can plugins provide seamless background functionality?
+4. What are the performance implications of background indexing?
+
+### Project Memory Enhancement
+1. How to build effective dependency graphs?
+2. What are the best practices for code relationship mapping?
+3. How to balance memory usage with performance?
+4. What contextual information is most valuable for Claude?
+
+### Zero-Configuration Setup
+1. How to auto-detect project characteristics?
+2. What default optimizations work best for different project types?
+3. How to handle language-specific features automatically?
+4. What are the patterns for intelligent defaults?
+
+---
+
+## SUCCESS METRICS (Plugin Focus)
+
+### Phase A: Infrastructure
+- [ ] Plugin auto-discovery working
+- [ ] Background indexing without user intervention
+- [ ] Project type auto-detection
+- [ ] Zero-configuration installation
+
+### Phase B: Enhanced Memory
+- [ ] Dependency relationship mapping
+- [ ] Code relationship networks
+- [ ] Change-aware context updates
+- [ ] Project-specific optimizations
+
+### Phase C: Integration
+- [ ] One-click plugin installation
+- [ ] Seamless Claude Code integration
+- [ ] Auto-update mechanism
+- [ ] Performance monitoring
+
+### Overall Plugin Goals
+- [ ] Claude Code users can install with "/plugin install"
+- [ ] Background memory works without user awareness
+- [ ] 50%+ improvement in context awareness
+- [ ] <100ms additional latency overhead
+- [ ] 95%+ user satisfaction with enhanced memory
+
+---
+
+---
+
+## 🎯 NEW FOCUS: Claude Code Plugin Development
+
+### ✅ Claude Code Plugin Architecture Research COMPLETED
+
+**Key Findings from Comprehensive Research:**
+
+**Plugin Discovery & Installation:**
+- **Primary Command**: `/plugin install prism@claude-plugins-official`
+- **Auto-Start**: MCP servers start automatically with plugin enable
+- **Background Operation**: `${CLAUDE_PLUGIN_ROOT}` for internal path resolution
+- **Zero-Setup**: Environment variable expansion for flexible configuration
+
+**Plugin Structure Requirements:**
+```
+.prism-plugin/
+├── .claude-plugin/
+│   └── plugin.json          # Required manifest
+├── commands/               # Slash commands (Markdown files)
+├── agents/                 # Custom agents (Markdown files)
+├── .mcp.json              # MCP server configurations
+└── daemon/                # Background services
+    └── server.js         # Auto-start daemon
+```
+
+**Enhanced Plugin Architecture:**
+
+#### Phase A: Plugin Infrastructure (Week 1)
+- **`.claude-plugin/plugin.json`** - Plugin manifest with auto-start MCP servers
+- **`.mcp.json`** - Background daemon configuration with environment variables
+- **`daemon/server.js`** - HTTP API for background operations (health, index, search)
+- **Auto-discovery** of project structure and dependencies
+- **Zero-configuration** installation with sensible defaults
+
+#### Phase B: Enhanced Project Memory (Week 2)
+- **Memory Manager** - Intelligent project structure analysis
+- **Auto-Indexer** - Background indexing with smart batching
+- **Cache Manager** - Multi-layer caching for frequent queries
+- **Dependency Graph** - Relationship mapping between code elements
+
+#### Phase C: MCP Integration (Week 3)
+- **Enhanced MCP Tools** - Context-aware search and retrieval
+- **Slash Commands** - Intuitive user interface
+- **Project Assistant** - Context-aware code generation
+- **Performance Monitoring** - Real-time metrics and optimization
+
+#### Phase D: Marketplace Distribution (Week 4)
+- **Documentation** - Comprehensive user guides
+- **Build System** - Automated packaging and deployment
+- **Marketplace Integration** - Official Claude Code plugin registry
+- **Community Support** - User feedback and iteration
+
+---
+
+## 🚀 Implementation Strategy
+
+### Enhanced Agent Specialization for Plugin Development
+
+**Plugin Infrastructure Builder**
+- Claude Code plugin manifest and MCP configuration
+- Background daemon with HTTP API
+- Auto-discovery and zero-setup installation
+- Marketplace packaging and distribution
+
+**Memory Systems Architect**
+- Intelligent project structure analysis
+- Background indexing algorithms
+- Multi-layer caching strategies
+- Relationship mapping engines
+
+**Claude Integration Engineer**
+- MCP tool implementations
+- Slash command interface design
+- Context-aware assistant development
+- Performance optimization
+
+**UX & Documentation Specialist**
+- User experience design
+- Comprehensive documentation
+- Onboarding flow development
+- Community support and feedback
+
+**Research & Performance Analyst**
+- Claude Code ecosystem research
+- Performance benchmarking
+- User behavior analysis
+- Optimization opportunities
+
+### Success Metrics
+
+#### Installation & Setup
+- [ ] `/plugin install prism@claude-plugins-official` works seamlessly
+- [ ] Zero manual configuration required
+- [ ] Background daemon starts automatically
+- [ ] Project memory begins indexing within 60 seconds
+
+#### Functionality
+- [ ] Semantic code search returns relevant results
+- [ ] Context-aware code generation
+- [ ] Background indexing during idle time
+- [ ] Smart caching improves response times
+
+#### Performance
+- [ ] Search results <100ms for 10K+ files
+- [ ] Indexing completes <5s for typical projects
+- [ ] Memory usage <100MB at idle
+- [ ] <1% CPU usage when idle
+
+#### Integration
+- [ ] MCP tools available in Claude's toolkit
+- [ ] Slash commands work intuitively
+- [ ] Project-aware assistant provides value
+- [ ] No conflicts with other plugins
+
+---
+
+## 🎯 Immediate Next Steps
+
+### Phase 1: Plugin Infrastructure (This Week)
+1. **Create plugin manifest** (`.claude-plugin/plugin.json`)
+2. **Implement MCP daemon** (`daemon/server.js`)
+3. **Add auto-discovery** of project structure
+4. **Setup marketplace packaging**
+
+### Phase 2: Enhanced Memory (Next Week)
+1. **Memory management system** with intelligent caching
+2. **Background indexing daemon** with smart batching
+3. **Dependency graph construction** for context awareness
+4. **Performance optimization** for large projects
+
+### Phase 3: Integration (Week 3)
+1. **Enhanced MCP tools** for Claude Code integration
+2. **Intuitive slash commands** for user control
+3. **Project-aware assistant** with context enhancement
+4. **Comprehensive documentation** and examples
+
+### Phase 4: Distribution (Week 4)
+1. **Marketplace deployment** to official registry
+2. **User onboarding experience** optimization
+3. **Community support** infrastructure
+4. **Feedback collection** and iteration
+
+---
+
+**Last Updated:** Claude Code Plugin Architecture Research Complete
+**Current Focus:** Plugin Infrastructure Implementation
+**Target:** Seamless "/plugin install" Experience
+**Timeline:** 4 weeks for complete plugin enhancement
+
+---
+
+## Success Metrics (Plugin Focus)
+
+### Phase A: Infrastructure (Current)
+- [ ] Plugin manifest and MCP configuration
+- [ ] Background daemon with HTTP API
+- [ ] Auto-discovery of project structure
+- [ ] Zero-configuration installation
+
+### Phase B: Enhanced Memory
+- [ ] Intelligent memory management system
+- [ ] Background indexing with smart batching
+- [ ] Multi-layer caching strategies
+- [ ] Dependency relationship mapping
+
+### Phase C: Integration
+- [ ] Enhanced MCP tools for Claude Code
+- [ ] Intuitive slash commands interface
+- [ ] Project-aware assistant development
+- [ ] Performance monitoring and optimization
+
+### Phase D: Distribution
+- [ ] Marketplace packaging and deployment
+- [ ] Comprehensive documentation
+- [ ] User onboarding experience
+- [ ] Community support infrastructure
+
+### Overall Plugin Goals
+- [ ] Claude Code users can install with "/plugin install"
+- [ ] Background memory works without user awareness
+- [ ] 50%+ improvement in context awareness
+- [ ] <100ms additional latency overhead
+- [ ] 95%+ user satisfaction with enhanced memory
+
+---
+
+**Final Note:** Building a truly seamless plugin that enhances Claude's project understanding without requiring user intervention. The goal is to create "install and forget" functionality that significantly improves Claude Code's ability to understand project context and provide better assistance.
