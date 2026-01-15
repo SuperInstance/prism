@@ -1,10 +1,32 @@
-# PRISM Project Memory Plugin for Claude Code
+# PRISM Local JSON Plugin for Claude Code
 
-Enhanced project memory for Claude Code with semantic search and context awareness.
+A plugin that provides project memory and search capabilities for Claude Code using local JSON storage.
 
-## 🚀 Overview
+## Overview
 
-PRISM is a Claude Code plugin that provides intelligent project memory and semantic search capabilities. It automatically understands your project structure, tracks changes, and provides context-aware assistance to make Claude Code significantly more helpful.
+This plugin provides a background daemon that indexes your project and makes it searchable through Claude Code. It uses local JSON storage for simplicity and reliability.
+
+## What It Does
+
+- **Indexes your project**: Creates a searchable index of your code files
+- **Provides search tools**: Lets Claude Code search through your project
+- **Monitors changes**: Updates the index when files change
+- **Runs locally**: No external dependencies or network calls
+
+## Installation
+
+### Quick Install
+```bash
+/plugin install prism-project-memory@claude-plugins-official
+```
+
+### Manual Install
+```bash
+git clone https://github.com/SuperInstance/Claude-prism-local-json.git
+cd Claude-prism-local-json
+npm install
+claude plugin install .
+```
 
 ### Key Features
 

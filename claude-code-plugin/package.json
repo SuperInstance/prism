@@ -1,7 +1,7 @@
 {
   "name": "prism-project-memory",
   "version": "1.0.0",
-  "description": "Enhanced project memory for Claude Code with semantic search and context awareness",
+  "description": "Local JSON storage plugin providing project indexing and search for Claude Code",
   "main": "daemon/server.js",
   "scripts": {
     "start": "node daemon/server.js",
@@ -14,11 +14,10 @@
     "claude",
     "plugin",
     "code-search",
-    "memory",
-    "context",
-    "semantic-search",
+    "indexing",
+    "local-storage",
     "development",
-    "productivity"
+    "project-management"
   ],
   "author": {
     "name": "PRISM Team",
