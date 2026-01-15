@@ -1,0 +1,108 @@
+# PRISM Plugin - NPM Package Ignore File
+# Excludes files from NPM distribution package
+
+# Development and testing
+test/
+tests/
+*.test.js
+*.spec.js
+test-*.js
+test-*.sh
+*.test.ts
+*.spec.ts
+coverage/
+.nyc_output/
+junit.xml
+
+# Documentation (keep only essential)
+docs/dev/
+docs/internal/
+*.md
+!README.md
+!LICENSE
+!INSTALL.md
+!QUICK-START.md
+
+# Build and temporary files
+build/
+dist/
+*.log
+*.tmp
+*.temp
+logs/
+temp/
+.prism/
+cache/
+index/
+
+# Development configuration
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+circle.yml
+appveyor.yml
+
+# Scripts not needed for distribution
+scripts/test-*.js
+scripts/test-*.sh
+scripts/benchmark*.js
+scripts/benchmark*.sh
+scripts/validate-*.js
+scripts/deploy.js
+demo-*.sh
+benchmark.sh
+
+# Development dependencies
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Environment and local config
+.env
+.env.*
+.dev.vars
+*.local
+
+# Backup and archive files
+*.backup
+*.bak
+*.old
+*.orig
+backup/
+backups/
+
+# Status and progress files
+*_COMPLETE.md
+*_SUMMARY.md
+*_REPORT.md
+STATUS.md
+ACTION_PLAN.md
+AUDIT_REPORT.md
+
+# Keep essential files for distribution
+!.claude-plugin/
+!.mcp.json
+!daemon/
+!commands/
+!agents/
+!scripts/install.sh
+!scripts/install.ps1
+!scripts/build.js
+!LICENSE
+!README.md
+!package.json

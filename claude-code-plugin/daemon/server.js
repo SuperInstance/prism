@@ -10,13 +10,15 @@ const path = require('path');
 const http = require('http');
 const SimpleProjectDetector = require('./simple-project-detector');
 const FileIndexer = require('./file-indexer');
+const FileWatcher = require('./file-watcher');
 
 class PrismDaemon {
   constructor() {
     this.config = {
       port: parseInt(process.env.PORT) || 8080,
       projectRoot: process.env.PROJECT_ROOT || process.cwd(),
-      logLevel: process.env.LOG_LEVEL || 'info'
+      logLevel: process.env.LOG_LEVEL || 'info',
+      enableWatcher: process.env.ENABLE_WATCHER !== 'false' // Default: enabled
     };
 
     this.server = http.createServer(this.handleRequest.bind(this));
@@ -29,6 +31,47 @@ class PrismDaemon {
       path.join(this.config.projectRoot, '.prism')
     );
     this.indexLoaded = false;
+
+    // Initialize file watcher
+    this.watcher = null;
+    if (this.config.enableWatcher) {
+      this.watcher = new FileWatcher(this.config.projectRoot);
+      this.setupWatcherHandlers();
+    }
+  }
+
+  /**
+   * Setup file watcher event handlers
+   */
+  setupWatcherHandlers() {
+    if (!this.watcher) return;
+
+    this.watcher.on('fileChanged', async ({ fullPath }) => {
+      try {
+        await this.indexer.updateFile(fullPath);
+        console.log('[PRISM] Index updated after file change');
+      } catch (error) {
+        console.error('[PRISM] Failed to update index after file change:', error.message);
+      }
+    });
+
+    this.watcher.on('fileCreated', async ({ fullPath }) => {
+      try {
+        await this.indexer.updateFile(fullPath);
+        console.log('[PRISM] Index updated after file creation');
+      } catch (error) {
+        console.error('[PRISM] Failed to update index after file creation:', error.message);
+      }
+    });
+
+    this.watcher.on('fileDeleted', async ({ fullPath }) => {
+      try {
+        await this.indexer.removeFile(fullPath);
+        console.log('[PRISM] Index updated after file deletion');
+      } catch (error) {
+        console.error('[PRISM] Failed to update index after file deletion:', error.message);
+      }
+    });
   }
 
   /**
@@ -49,6 +92,12 @@ class PrismDaemon {
         await this.indexer.indexProject();
         this.indexer.loadedIndex = await this.indexer.loadIndex();
         this.indexLoaded = true;
+      }
+
+      // Start file watcher
+      if (this.watcher && this.config.enableWatcher) {
+        await this.watcher.start();
+        console.log('[PRISM] File watcher enabled');
       }
 
       console.log(`[PRISM] Project: ${this.projectInfo?.name || 'Unknown'} (${this.projectInfo?.language || 'unknown'})`);
@@ -99,6 +148,12 @@ class PrismDaemon {
       this.handleSearch(req, res);
     } else if (method === 'POST' && url === '/index') {
       this.handleReindex(req, res);
+    } else if (method === 'GET' && url === '/watcher/status') {
+      this.handleWatcherStatus(res);
+    } else if (method === 'POST' && url === '/watcher/enable') {
+      this.handleWatcherEnable(res);
+    } else if (method === 'POST' && url === '/watcher/disable') {
+      this.handleWatcherDisable(res);
     } else if (method === 'GET' && url === '/tools/list') {
       this.handleToolsList(res);
     } else if (method === 'POST' && url === '/tools/call') {
@@ -239,6 +294,94 @@ class PrismDaemon {
       .catch(error => {
         console.error('[PRISM] Reindexing failed:', error);
       });
+  }
+
+  /**
+   * Handle watcher status request
+   */
+  handleWatcherStatus(res) {
+    if (!this.watcher) {
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        enabled: false,
+        message: 'File watcher is not configured'
+      }));
+      return;
+    }
+
+    const stats = this.watcher.getStats();
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      enabled: true,
+      ...stats
+    }));
+  }
+
+  /**
+   * Handle watcher enable request
+   */
+  async handleWatcherEnable(res) {
+    if (!this.watcher) {
+      res.writeHead(400);
+      res.end(JSON.stringify({
+        error: 'File watcher not configured'
+      }));
+      return;
+    }
+
+    try {
+      if (this.watcher.isWatching) {
+        res.writeHead(200);
+        res.end(JSON.stringify({
+          status: 'already_enabled',
+          message: 'File watcher is already running'
+        }));
+        return;
+      }
+
+      await this.watcher.start();
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        status: 'enabled',
+        message: 'File watcher started'
+      }));
+    } catch (error) {
+      console.error('[PRISM] Failed to enable watcher:', error);
+      res.writeHead(500);
+      res.end(JSON.stringify({
+        error: 'Failed to start file watcher',
+        message: error.message
+      }));
+    }
+  }
+
+  /**
+   * Handle watcher disable request
+   */
+  handleWatcherDisable(res) {
+    if (!this.watcher) {
+      res.writeHead(400);
+      res.end(JSON.stringify({
+        error: 'File watcher not configured'
+      }));
+      return;
+    }
+
+    if (!this.watcher.isWatching) {
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        status: 'already_disabled',
+        message: 'File watcher is not running'
+      }));
+      return;
+    }
+
+    this.watcher.stop();
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      status: 'disabled',
+      message: 'File watcher stopped'
+    }));
   }
 
   /**
@@ -522,6 +665,11 @@ class PrismDaemon {
   async stop() {
     if (!this.isRunning) {
       return;
+    }
+
+    // Stop file watcher
+    if (this.watcher) {
+      this.watcher.stop();
     }
 
     return new Promise((resolve) => {

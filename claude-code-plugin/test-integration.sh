@@ -412,11 +412,19 @@ test_concurrent_requests() {
 
     log_info "Sending 10 concurrent health check requests..."
 
+    # Store PIDs of background processes
+    pids=()
     for i in {1..10}; do
         curl -s "${BASE_URL}/health" > /dev/null &
+        pids+=($!)
     done
 
-    wait
+    # Wait for all background processes to complete
+    for pid in "${pids[@]}"; do
+        wait "$pid" 2>/dev/null || true
+    done
+
+    log_info "All concurrent requests completed"
 
     # Check if server is still responsive
     response=$(curl -s -w "\n%{http_code}" "${BASE_URL}/health")

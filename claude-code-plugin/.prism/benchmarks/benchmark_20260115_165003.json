@@ -1,0 +1,53 @@
+{
+  "timestamp": "20260115_165003",
+  "memory": {
+    "baseline_mb": 161.92,
+    "peak_mb": 162.18,
+    "target_mb": 100
+  },
+  "index": {
+    "version": "2.0",
+    "file_count": 50,
+    "size_kb": 1345,
+    "avg_per_file_kb": 26.90
+  },
+  "search": {
+    "average_ms": 40,
+    "min_ms": 38,
+    "max_ms": 44,
+    "target_ms": 30,
+    "query_count": 5
+  },
+  "queries": [
+    {
+      "query": "function",
+      "description": "Single keyword search",
+      "time_ms": 44,
+      "result_count": 10
+    },
+    {
+      "query": "const result",
+      "description": "Multi-word phrase search",
+      "time_ms": 39,
+      "result_count": 10
+    },
+    {
+      "query": "async await",
+      "description": "Common pattern search",
+      "time_ms": 38,
+      "result_count": 0
+    },
+    {
+      "query": "error handling",
+      "description": "Domain-specific search",
+      "time_ms": 39,
+      "result_count": 10
+    },
+    {
+      "query": "optimization performance",
+      "description": "Multi-term search",
+      "time_ms": 40,
+      "result_count": 0
+    }
+  ]
+}
