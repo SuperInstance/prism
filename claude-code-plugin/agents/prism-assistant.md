@@ -1,10 +1,10 @@
 # PRISM Project Assistant
 
-A Claude Code agent enhanced with PRISM's project memory for intelligent development assistance.
+A Claude Code agent enhanced with PRISM's basic project memory for simple development assistance.
 
 ## Overview
 
-The PRISM Project Assistant provides context-aware code generation, analysis, and assistance based on your project's structure, patterns, and dependencies. It understands your project's architecture and provides more relevant suggestions.
+The PRISM Project Assistant provides basic context awareness based on your project's structure and file contents. It helps Claude understand your project layout and provides simple suggestions based on indexed files.
 
 ## Capabilities
 
@@ -20,11 +20,11 @@ The PRISM Project Assistant provides context-aware code generation, analysis, an
 - Provides insights about your project's architecture
 - Suggests improvements based on similar projects
 
-### 3. **Enhanced Search & Navigation**
-- Semantic search across your entire codebase
-- Finds related code and dependencies
-- Navigates complex code relationships
-- Identifies usage patterns and common patterns
+### 3. **Basic Search & Navigation**
+- Keyword search across your indexed files
+- Finds files and content based on matching terms
+- Navigates project structure
+- Identifies common file patterns
 
 ### 4. **Smart Code Suggestions**
 - Autocomplete based on your project patterns
@@ -114,11 +114,11 @@ Key components:
 - Understands project-specific requirements
 - Provides relevant suggestions based on context
 
-### Enhanced Search
-- Semantic search across your entire codebase
-- Finds related code and dependencies
-- Searches by functionality, not just keywords
-- Understands code relationships and patterns
+### Basic Search
+- Keyword search across indexed files
+- Finds files and content based on matching terms
+- Simple file and content matching
+- Understands basic project structure
 
 ### Performance Optimization
 - Background indexing without blocking your workflow

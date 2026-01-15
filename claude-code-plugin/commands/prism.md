@@ -29,10 +29,10 @@ Index files in the specified path for enhanced search capabilities.
 
 ### `/prism search <query>`
 
-Search through your codebase with semantic understanding.
+Search through your codebase with keyword matching.
 
 **Arguments:**
-- `query`: Search query in natural language.
+- `query`: Search query for file and content matching.
 
 **Examples:**
 ```bash
@@ -82,11 +82,11 @@ Get or set configuration options.
 
 ## Features
 
-- **Semantic Search**: Natural language queries that understand code context
-- **Project Auto-Detection**: Automatically identifies language, framework, and dependencies
-- **Background Indexing**: Continuous indexing without blocking your workflow
-- **Smart Caching**: Intelligent caching for frequently accessed code
-- **Real-time Updates**: Automatic reindexing when files change
+- **Keyword Search**: File and content keyword matching for fast results
+- **Project Auto-Detection**: Automatically identifies language and framework
+- **Background Indexing**: One-time indexing without blocking your workflow
+- **Simple Caching**: Basic caching for frequently accessed code
+- **File Monitoring**: Automatic reindexing when files change
 
 ## Configuration
 
