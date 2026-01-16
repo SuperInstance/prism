@@ -1,6 +1,6 @@
 {
   "name": "prism-project-memory",
-  "version": "1.0.0",
+  "version": "0.6.0",
   "description": "Local JSON storage plugin providing project indexing and search for Claude Code",
   "main": "daemon/server.js",
   "bin": {

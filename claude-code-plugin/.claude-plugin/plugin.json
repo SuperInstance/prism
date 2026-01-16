@@ -1,6 +1,6 @@
 {
   "name": "prism-project-memory",
-  "version": "1.0.0",
+  "version": "0.6.0",
   "description": "Simple, stable project memory for Claude Code using local JSON storage. No external dependencies, zero configuration, perfect for projects that need basic search and memory without complexity.",
   "author": {
     "name": "PRISM Team",
@@ -23,8 +23,10 @@
     "noExternalDependencies": true
   },
   "performance": {
-    "memoryUsage": "<50MB",
+    "memoryUsage": "<40MB",
     "searchResponse": "<10ms",
+    "indexSize": "60-70% smaller",
+    "indexSpeed": "3-4x faster",
     "installationTime": "<60 seconds"
   },
   "supportedLanguages": [

@@ -55,12 +55,14 @@ Show current project memory status and statistics.
 {
   "project": "my-app",
   "language": "javascript",
-  "indexed_files": 156,
-  "total_size": "2.3MB",
-  "last_index": "2024-01-14T10:30:00Z",
-  "search_performance": {
-    "avg_response_time": "45ms",
-    "cache_hit_rate": "87%"
+  "indexedFiles": 156,
+  "lastIndexed": "2024-01-14T10:30:00Z",
+  "searchCacheSize": 12,
+  "uptime": 134,
+  "memoryUsage": {
+    "rss": "57MB",
+    "heapUsed": "5.2MB",
+    "external": "1.9MB"
   }
 }
 ```

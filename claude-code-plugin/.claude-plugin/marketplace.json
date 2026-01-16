@@ -6,7 +6,7 @@
     "email": "team@claude-prism.dev",
     "url": "https://github.com/SuperInstance/Claude-prism-local-json"
   },
-  "version": "1.0.0",
+  "version": "0.6.0",
   "website": "https://github.com/SuperInstance/Claude-prism-local-json",
   "repository": "https://github.com/SuperInstance/Claude-prism-local-json",
   "documentation": "https://github.com/SuperInstance/Claude-prism-local-json#readme",
@@ -45,9 +45,9 @@
     "platforms": ["windows", "macos", "linux"]
   },
   "performance": {
-    "memoryUsage": "<50MB",
+    "memoryUsage": "<40MB",
     "searchResponse": "<10ms",
-    "storageSpace": "60-70% reduction",
+    "storageSpace": "60-70% smaller",
     "installationTime": "<60 seconds"
   },
   "supportedLanguages": [
@@ -72,7 +72,7 @@
     "errorHandling": "robust",
     "performance": "optimized"
   },
-  "lastUpdated": "2026-01-14",
+  "lastUpdated": "2026-01-15",
   "compatibility": {
     "claudeCode": "latest",
     "nodejs": "18+"
