@@ -43,7 +43,15 @@ You: *Fixed in 5 minutes*
 **Install once. Works for all your projects automatically.**
 
 ```bash
-/plugin install https://github.com/SuperInstance/prism/tree/main/claude-code-plugin
+# Clone the repository
+git clone https://github.com/SuperInstance/prism.git
+cd prism/claude-code-plugin
+
+# Install dependencies
+npm install
+
+# Register with Claude Code
+claude plugin install .
 ```
 
 **That's it!** PRISM will:
@@ -54,6 +62,8 @@ You: *Fixed in 5 minutes*
 - ✅ Keep each project's index separate (no confusion!)
 
 **Zero configuration. Zero maintenance. Just works.** 🚀
+
+> **Note:** One-click marketplace installation (`/plugin install`) coming soon!
 
 ### For CLI Usage (Optional)
 
