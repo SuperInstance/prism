@@ -151,11 +151,33 @@ export class CloudflareClient {
       );
 
       if (!response.ok) {
-        const errorData = await response.json() as { errors?: Array<{ message: string }> };
-        throw new Error(`Cloudflare API error: ${errorData.errors?.[0]?.message || response.statusText}`);
+        let errorData: { errors?: Array<{ message: string }> } = {};
+        try {
+          errorData = await response.json();
+        } catch (parseError) {
+          throw createPrismError(
+            ErrorCode.MODEL_ROUTING_FAILED,
+            `Cloudflare API returned HTTP ${response.status}: ${response.statusText}`,
+            { statusCode: response.status }
+          );
+        }
+        throw createPrismError(
+          ErrorCode.MODEL_ROUTING_FAILED,
+          `Cloudflare API error: ${errorData.errors?.[0]?.message || response.statusText}`,
+          { statusCode: response.status, errors: errorData.errors }
+        );
       }
 
-      const data = await response.json() as CloudflareResponse;
+      let data: CloudflareResponse;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        throw createPrismError(
+          ErrorCode.MODEL_ROUTING_FAILED,
+          'Failed to parse Cloudflare API response: Invalid JSON format',
+          { originalError: parseError instanceof Error ? parseError.message : String(parseError) }
+        );
+      }
 
       // Check for errors in response
       if (data.errors && data.errors.length > 0) {
@@ -207,12 +229,19 @@ export class CloudflareClient {
       );
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch models: ${response.statusText}`);
+        throw new Error(`Failed to fetch models: HTTP ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json() as {
-        result?: Array<{ name: string; description?: string }>;
-      };
+      let data: { result?: Array<{ name: string; description?: string }> };
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        throw createPrismError(
+          ErrorCode.MODEL_ROUTING_FAILED,
+          'Failed to parse Cloudflare models response: Invalid JSON format',
+          { originalError: parseError instanceof Error ? parseError.message : String(parseError) }
+        );
+      }
 
       return data.result || [];
     } catch (error) {

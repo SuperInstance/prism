@@ -2,6 +2,33 @@
 
 > **Search code by meaning, not keywords - so AI assistants give you correct answers in seconds instead of hours.**
 
+**Version 0.3.2** | [Documentation](#documentation) | [Quick Start](#setup-5-minutes-no-experience-needed) | [API Reference](./API_REFERENCE.md) | [Troubleshooting](./TROUBLESHOOTING.md)
+
+---
+
+## What's New in v0.3.2
+
+🎉 **Major Documentation Update!**
+
+- ✅ **Complete User Guide** - Installation, usage, and best practices
+- ✅ **Comprehensive API Reference** - All endpoints with examples
+- ✅ **Troubleshooting Guide** - Solutions to common issues
+- ✅ **Configuration Guide** - Environment variables and tuning
+
+**Recent Features:**
+- 🔒 Enhanced security with origin validation and path traversal protection
+- 📊 Structured logging system with configurable log levels
+- ⚡ Improved error handling and validation
+- 🎯 Better type safety with comprehensive interfaces
+- 🚀 Parallelized embedding generation for faster indexing
+
+**Performance Metrics:**
+- Search: <400ms for 1M chunks (1,600x faster than brute-force)
+- Indexing: 21x faster with incremental mode
+- Accuracy: 85%+ search relevance
+
+[View Full Changelog →](#version-history)
+
 ---
 
 ## The Problem: You're Working in a Large Codebase
@@ -526,11 +553,39 @@ npx wrangler d1 execute claudes-friend-db --file=migrations/002_vector_index.sql
 
 ## Documentation
 
+### 📚 User Documentation
+
+- **[User Guide](./USER_GUIDE.md)** - Complete guide to using PRISM
+  - Installation (multiple methods)
+  - Quick start (5-minute setup)
+  - Basic and advanced usage
+  - Troubleshooting and FAQ
+
+- **[API Reference](./API_REFERENCE.md)** - Complete API documentation
+  - HTTP endpoints with examples
+  - CLI commands reference
+  - MCP tools specification
+  - Error codes and handling
+
+- **[Troubleshooting Guide](./TROUBLESHOOTING.md)** - Solutions to common issues
+  - Installation problems
+  - Server/worker issues
+  - Indexing and search problems
+  - Performance optimization
+
+- **[Configuration Guide](./CONFIGURATION.md)** - Configuration reference
+  - Environment variables
+  - Worker configuration
+  - File patterns
+  - Performance tuning
+
+### 🏗️ Developer Documentation
+
 - [CLI Documentation](./docs/prism-cli.md)
+- [Architecture Overview](./docs/architecture/01-system-overview.md)
+- [API Design](./docs/api/01-core-api.md)
 - [Benchmark Results](./docs/benchmark-results.md)
 - [Development Guide](./CLAUDE.md)
-- [API Documentation](./docs/api/01-core-api.md)
-- [Architecture](./docs/architecture/01-system-overview.md)
 
 ---
 
@@ -630,6 +685,17 @@ A: Yes! PRISM is open source and you can deploy it anywhere that supports Node.j
 
 ---
 
+## Getting Help
+
+- 📖 **[User Guide](./USER_GUIDE.md)** - Complete usage documentation
+- 🔧 **[Troubleshooting](./TROUBLESHOOTING.md)** - Common issues and solutions
+- 📝 **[API Reference](./API_REFERENCE.md)** - API documentation
+- ⚙️ **[Configuration](./CONFIGURATION.md)** - Configuration guide
+- 🐛 **[Report Issues](https://github.com/SuperInstance/PRISM/issues)** - Bug reports and feature requests
+- 💬 **[Discussions](https://github.com/SuperInstance/PRISM/discussions)** - Ask questions and share ideas
+
+---
+
 **Built with ❤️ using Cloudflare Workers and Vectorize**
 
-**[GitHub](https://github.com/SuperInstance/PRISM)** · **[Issues](https://github.com/SuperInstance/PRISM/issues)** · **[Documentation](./docs/)**
+**[GitHub](https://github.com/SuperInstance/PRISM)** · **[Documentation](./USER_GUIDE.md)** · **[API Reference](./API_REFERENCE.md)** · **[Issues](https://github.com/SuperInstance/PRISM/issues)**

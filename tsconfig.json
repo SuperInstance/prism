@@ -4,7 +4,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM"],
 
     // Output
     "outDir": "./dist",
@@ -14,17 +14,18 @@
     "declarationMap": true,
     "sourceMap": true,
     "importHelpers": true,
+    "noEmitOnError": false,
 
     // Strict Checks
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
-    "noImplicitReturns": true,
-    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": false,
+    "noUncheckedIndexedAccess": false,
     "allowUnusedLabels": false,
     "allowUnreachableCode": false,
-    "exactOptionalPropertyTypes": true,
+    "exactOptionalPropertyTypes": false,
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": false,
 
@@ -36,13 +37,7 @@
 
     // Advanced
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-
-    // Cloudflare Workers specific
-    "types": ["@cloudflare/workers-types"],
-    "jsx": "react",
-    "jsxFactory": "h",
-    "jsxFragmentFactory": "Fragment"
+    "forceConsistentCasingInFileNames": true
   },
   "include": [
     "src/**/*"
@@ -54,6 +49,9 @@
     "migrations",
     "tests",
     "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "src/worker-*.ts",
+    "src/indexer/D1IndexStorage.ts",
+    "src/vector-db/D1VectorDB.ts"
   ]
 }

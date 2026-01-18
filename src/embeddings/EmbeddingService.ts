@@ -169,6 +169,16 @@ export class EmbeddingService implements IEmbeddingService {
       );
     }
 
+    // Validate text length (max 10,000 characters to prevent API timeouts)
+    const MAX_TEXT_LENGTH = 10000;
+    if (text.length > MAX_TEXT_LENGTH) {
+      throw createPrismError(
+        ErrorCode.EMBEDDING_FAILED,
+        `Text too long for embedding: ${text.length} characters exceeds maximum of ${MAX_TEXT_LENGTH}`,
+        { textLength: text.length, maxLength: MAX_TEXT_LENGTH }
+      );
+    }
+
     const embeddings = await this.embedBatch([text]);
     return embeddings[0];
   }
@@ -221,8 +231,29 @@ export class EmbeddingService implements IEmbeddingService {
       return [];
     }
 
-    // Filter out empty texts
-    const validTexts = texts.filter((t) => t && t.trim().length > 0);
+    // Validate batch size
+    const MAX_BATCH_SIZE = 1000;
+    if (texts.length > MAX_BATCH_SIZE) {
+      throw createPrismError(
+        ErrorCode.EMBEDDING_FAILED,
+        `Batch size too large: ${texts.length} texts exceeds maximum of ${MAX_BATCH_SIZE}`,
+        { batchSize: texts.length, maxBatchSize: MAX_BATCH_SIZE }
+      );
+    }
+
+    // Filter out empty texts and validate lengths
+    const MAX_TEXT_LENGTH = 10000;
+    const validTexts = texts.filter((t) => {
+      if (!t || t.trim().length === 0) {
+        return false;
+      }
+      if (t.length > MAX_TEXT_LENGTH) {
+        console.warn(`[EmbeddingService] Skipping text longer than ${MAX_TEXT_LENGTH} characters (${t.length} chars)`);
+        return false;
+      }
+      return true;
+    });
+
     if (validTexts.length === 0) {
       throw createPrismError(
         ErrorCode.EMBEDDING_FAILED,
@@ -370,16 +401,31 @@ export class EmbeddingService implements IEmbeddingService {
 
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(
-            `Cloudflare API error ${response.status}: ${errorText}`
+          throw createPrismError(
+            ErrorCode.EMBEDDING_FAILED,
+            `Cloudflare API returned HTTP ${response.status}: ${errorText}`,
+            { statusCode: response.status }
           );
         }
 
-        const data: CloudflareEmbeddingResponse = await response.json();
+        let data: CloudflareEmbeddingResponse;
+        try {
+          data = await response.json();
+        } catch (parseError) {
+          throw createPrismError(
+            ErrorCode.EMBEDDING_FAILED,
+            'Failed to parse Cloudflare embedding response: Invalid JSON format',
+            { originalError: parseError instanceof Error ? parseError.message : String(parseError) }
+          );
+        }
 
         if (!data.success) {
           const errorMessage = data.errors?.[0]?.message || 'Unknown error';
-          throw new Error(`Cloudflare API failure: ${errorMessage}`);
+          throw createPrismError(
+            ErrorCode.EMBEDDING_FAILED,
+            `Cloudflare API failure: ${errorMessage}`,
+            { errors: data.errors }
+          );
         }
 
         if (!data.result?.data) {
@@ -455,15 +501,30 @@ export class EmbeddingService implements IEmbeddingService {
           clearTimeout(timeoutId);
 
           if (!response.ok) {
-            throw new Error(
-              `Ollama API error ${response.status}: ${response.statusText}`
+            throw createPrismError(
+              ErrorCode.EMBEDDING_FAILED,
+              `Ollama API returned HTTP ${response.status}: ${response.statusText}`,
+              { statusCode: response.status }
             );
           }
 
-          const data: OllamaEmbeddingResponse = await response.json();
+          let data: OllamaEmbeddingResponse;
+          try {
+            data = await response.json();
+          } catch (parseError) {
+            throw createPrismError(
+              ErrorCode.EMBEDDING_FAILED,
+              'Failed to parse Ollama embedding response: Invalid JSON format',
+              { originalError: parseError instanceof Error ? parseError.message : String(parseError) }
+            );
+          }
 
           if (!data.embedding) {
-            throw new Error('Invalid response format from Ollama');
+            throw createPrismError(
+              ErrorCode.EMBEDDING_FAILED,
+              'Invalid response format from Ollama: missing embedding field',
+              { responseKeys: Object.keys(data) }
+            );
           }
 
           embeddings.push(data.embedding);
