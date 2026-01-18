@@ -120,7 +120,6 @@ class PrismDaemon {
       }
 
       console.log(`[PRISM] Project: ${this.projectInfo?.name || 'Unknown'} (${this.projectInfo?.language || 'unknown'})`);
-      console.log(`[PRISM] Adaptive config: ${projectSize} files, max ${this.config.maxFiles} files, ${this.config.maxFileSize / 1024 / 1024}MB max file size`);
     } catch (error) {
       console.error('[PRISM] Initialization failed:', error.message);
       throw error;
